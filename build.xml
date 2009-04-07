@@ -79,8 +79,8 @@
         <exclude name="junit.jar"/>
       </fileset>
     </copy>
-    <jar jarfile="dist/proai.war" basedir="build/webapp"/>
-    <jar jarfile="dist/proai-${proai.version}.jar" basedir="build/webapp/WEB-INF/classes" includes="proai/** dbspec.xml schemas/**"/>
+    <jar jarfile="dist/escidocproai.war" basedir="build/webapp"/>
+    <jar jarfile="dist/escidocproai-${proai.version}.jar" basedir="build/webapp/WEB-INF/classes" includes="proai/** dbspec.xml schemas/**"/>
   </target>
 
   <target name="doc"
@@ -179,7 +179,7 @@
              propertyFile="src/java/proai/Proai.properties">
       <replacefilter token="@proai.version@" property="proai.version"/>
     </replace>
-    <zip zipfile="dist/release/proai-${proai.version}-src.zip" basedir="dist/release" includes="proai-${proai.version}-src/**"/>
+    <zip zipfile="dist/release/escidocproai-${proai.version}-src.zip" basedir="dist/release" includes="proai-${proai.version}-src/**"/>
     <delete dir="dist/release/proai-${proai.version}-src"/>
   </target>
 
@@ -189,7 +189,7 @@
         <exclude name="release/**"/>
       </fileset>
     </copy>
-    <zip zipfile="dist/release/proai-${proai.version}.zip" basedir="dist/release" includes="proai-${proai.version}/**"/>
+    <zip zipfile="dist/release/escidocproai-${proai.version}.zip" basedir="dist/release" includes="proai-${proai.version}/**"/>
     <delete dir="dist/release/proai-${proai.version}"/>
   </target>
 
