@@ -410,7 +410,9 @@ public class RCDatabase {
     public void deleteFormat(Connection conn, 
                              String prefix) throws ServerException {
         Statement stmt = null;
+        Statement stmt1 = null;
         ResultSet rs = null;
+        ResultSet rs1 = null;
         try {
             logger.info("Deleting format: " + prefix);
             stmt = getStatement(conn, false);
@@ -418,16 +420,18 @@ public class RCDatabase {
             if (rs.next()) {
                 int formatKey = rs.getInt(1);
                 executeUpdate(stmt, "DELETE FROM rcFormat WHERE formatKey = " + formatKey);
-                rs.close();
+                
                 // first mark xmlPaths of records in this format as prunable
                 // and delete set membership for relevant records
                 String selectRecordKey = "SELECT recordKey, xmlPath FROM rcRecord WHERE formatKey = " + formatKey;
-                rs = executeQuery(stmt, selectRecordKey);
-                while (rs.next()) {
-                    int recordKey = rs.getInt(1);
-                    String xmlPathToPrune = rs.getString(2);
+                stmt1 = getStatement(conn, false);
+                rs1 = executeQuery(stmt1, selectRecordKey);
+                while (rs1.next()) {
+                    int recordKey = rs1.getInt(1);
+                    String xmlPathToPrune = rs1.getString(2);
                     executeUpdate(stmt, "DELETE from rcMembership WHERE recordKey = " + recordKey);
                     addPrunable(stmt, xmlPathToPrune);
+                    
                 }
                 // then delete the actual records
                 executeUpdate(stmt, "DELETE FROM rcRecord WHERE formatKey = " + formatKey);
@@ -438,7 +442,9 @@ public class RCDatabase {
             throw new ServerException("Error deleting format: " + prefix, e);
         } finally {
             if (rs != null) try { rs.close(); } catch (Exception e) { }
+            if (rs1 != null) try { rs1.close(); } catch (Exception e) { }
             if (stmt != null) try { stmt.close(); } catch (Exception e) { }
+            if (stmt1 != null) try { stmt1.close(); } catch (Exception e) { }
         }
     }
 
