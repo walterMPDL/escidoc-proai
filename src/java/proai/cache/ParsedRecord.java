@@ -13,6 +13,7 @@ import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
 
 import proai.Record;
+import proai.error.RepositoryException;
 import proai.error.ServerException;
 import proai.util.StreamUtil;
 
@@ -24,7 +25,6 @@ public class ParsedRecord extends DefaultHandler implements Record {
     private String m_itemID;
     private String m_prefix;
     private String m_sourceInfo;
-
     private File m_file;
     private Date m_date;
     private List<String> m_setSpecs;
@@ -39,15 +39,25 @@ public class ParsedRecord extends DefaultHandler implements Record {
 
     public ParsedRecord(String itemID, 
                         String prefix, 
-                        String sourceInfo,
-                        File file) throws ServerException {
+                        String path,
+                        File file,
+                        String sourceInfo) throws ServerException {
         m_itemID = itemID;
         m_prefix = prefix;
-        m_sourceInfo = sourceInfo;
+        m_sourceInfo = path;
         m_file = file;
         m_date = new Date(0);
         m_setSpecs = new ArrayList<String>();
-
+        String[] parts = sourceInfo.trim().split(" ");
+        if (parts.length < 6) {
+            throw new RepositoryException(
+                "Error parsing sourceInfo (expecting " + "6 or more parts): '"
+                    + sourceInfo + "'");
+        }
+        
+        for (int i = 6; i < parts.length; i++) {
+            m_setSpecs.add(parts[i]);
+        }
         m_formatter1 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
         m_formatter2 = new SimpleDateFormat("yyyy-MM-dd");
 
@@ -79,10 +89,11 @@ public class ParsedRecord extends DefaultHandler implements Record {
             if (qName.equals("datestamp")) {
                 m_inDatestamp = true;
                 m_buf = new StringBuffer();
-            } else if (qName.equals("setSpec")) {
-                m_inSetSpec = true;
-                m_buf = new StringBuffer();
-            }
+            } 
+//                else if (qName.equals("setSpec")) {
+//                m_inSetSpec = true;
+//                m_buf = new StringBuffer();
+//            }
         }
     }
 
@@ -110,21 +121,22 @@ public class ParsedRecord extends DefaultHandler implements Record {
                     throw new SAXException("Record datestamp is unparsable: " + s);
                 }
                 m_inDatestamp = false;
-            } else if (qName.equals("setSpec")) {
-                String s = m_buf.toString().trim();
-                // Infer memberships based on setSpec:syntax:stuff
-                String[] h = s.split(":");
-                if (h.length > 1) {
-                    StringBuffer b4 = new StringBuffer();
-                    for (int i = 0; i < h.length; i++) {
-                        m_setSpecs.add(b4.toString() + h[i]);
-                        b4.append(h[i] + ":");
-                    }
-                } else {
-                    m_setSpecs.add(m_buf.toString().trim());
-                }
-                m_inSetSpec = false;
-            }
+            } 
+//            else if (qName.equals("setSpec")) {
+//                String s = m_buf.toString().trim();
+//                // Infer memberships based on setSpec:syntax:stuff
+//                String[] h = s.split(":");
+//                if (h.length > 1) {
+//                    StringBuffer b4 = new StringBuffer();
+//                    for (int i = 0; i < h.length; i++) {
+//                        m_setSpecs.add(b4.toString() + h[i]);
+//                        b4.append(h[i] + ":");
+//                    }
+//                } else {
+//                    m_setSpecs.add(m_buf.toString().trim());
+//                }
+//                m_inSetSpec = false;
+//            }
         }
     }
 
