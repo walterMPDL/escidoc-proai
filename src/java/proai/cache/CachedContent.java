@@ -83,32 +83,33 @@ public class CachedContent implements Writable {
             StringBuffer upToHeaderEnd = new StringBuffer();
             String line = reader.readLine();
             boolean sawHeaderEnd = false;
-            boolean sawSetSpecs = false;
-            boolean needFixSetSpecs = false;
+           // boolean sawSetSpecs = false;
+            //boolean needFixSetSpecs = false;
             while (line != null && !sawHeaderEnd) {
                 upToHeaderEnd.append(line + "\n");
                 if (line.indexOf("</h") != -1) {
                     sawHeaderEnd = true;
-                    if (!sawSetSpecs) {
-                        needFixSetSpecs = true;
-                    }
+                  //  if (!sawSetSpecs) {
+                   //     needFixSetSpecs = true;
+                   // }
                 }
                     line = reader.readLine();
-                    if (!sawHeaderEnd) {
-                    while ((line.indexOf("<setSpec>") != -1)
-                        || (line.indexOf("</setSpec>") != -1)) {
-                        line = reader.readLine();
-                        sawSetSpecs = true;
-                    }
-                    if (sawSetSpecs) {
-                        upToHeaderEnd.append(setSpecs);
-                    }
-                }
+//                    if (!sawHeaderEnd) {
+//                    while ((line.indexOf("<setSpec>") != -1)
+//                        || (line.indexOf("</setSpec>") != -1)) {
+//                        line = reader.readLine();
+//                        sawSetSpecs = true;
+//                    }
+//                    if (sawSetSpecs) {
+//                        upToHeaderEnd.append(setSpecs);
+//                    }
+//                }
             }
             if (!sawHeaderEnd) throw new ServerException("While parsing, never saw </header>");
             //String fixed = upToHeaderEnd.toString().replaceFirst("p>[^<]+<", "p>" + m_dateStamp + "<");
             String fixed = null;
-            if (needFixSetSpecs) {
+           // if (needFixSetSpecs) {
+            if(setSpecs.length() > 0) {
                 fixed = upToHeaderEnd.toString().replaceFirst("</header>", setSpecs + "</header>"  );
             } else {
                 fixed = upToHeaderEnd.toString();
