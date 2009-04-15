@@ -101,7 +101,8 @@ public class Worker extends Thread {
             qi.setParsedRecord(new ParsedRecord(qi.getIdentifier(),
                                                 qi.getMDPrefix(),
                                                 diskWriter.getPath(),
-                                                diskWriter.getFile()));
+                                                diskWriter.getFile(),
+                                                qi.getSourceInfo()));
 
             qi.setSucceeded(true);
 
