@@ -83,6 +83,7 @@ public class Worker extends Thread {
                 } 
                 qi.setState(validationInfo.getResult().toString());
             } else {
+                //Record is in state 'deleted'
                 qi.setState(ValidationResult.valid.toString());
             }
             diskWriter.flush();
@@ -97,12 +98,13 @@ public class Worker extends Thread {
 //                                    RecordCache.OAI_RECORD_SCHEMA_URL);
 //                validationDelay = System.currentTimeMillis() - endFetchTime;
 //            }
-            
+            if (!qi.getState().equals("notexist")) {
             qi.setParsedRecord(new ParsedRecord(qi.getIdentifier(),
                                                 qi.getMDPrefix(),
                                                 diskWriter.getPath(),
                                                 diskWriter.getFile(),
                                                 qi.getSourceInfo()));
+            }
 
             qi.setSucceeded(true);
 
