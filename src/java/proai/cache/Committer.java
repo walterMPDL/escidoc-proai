@@ -225,11 +225,15 @@ public class Committer extends Thread {
 
         _db.removeFromQueue(conn, item.getQueueKey());
         if (item.succeeded()) {
-            _db.putRecord(conn, item.getParsedRecord(), _formatKeyMap, item.getState());
+            if (!item.getState().equals("notexist")) {
+                _db.putRecord(conn, item.getParsedRecord(), _formatKeyMap, item.getState());
+            } 
             if (item.getQueueSource() == 'F') {
+                
                 _db.removeFailure(conn, item.getIdentifier(), item
                     .getMDPrefix());
             }
+            
         }
         else {
             int oldFailCount =
