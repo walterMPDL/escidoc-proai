@@ -1,30 +1,14 @@
 package proai.cache;
 
 import java.io.File;
-import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Vector;
-
-import net.sf.bvalid.SchemaLanguage;
-import net.sf.bvalid.Validator;
-import net.sf.bvalid.ValidatorFactory;
-import net.sf.bvalid.ValidatorOption;
-import net.sf.bvalid.catalog.DiskSchemaCatalog;
-import net.sf.bvalid.catalog.FileSchemaIndex;
-import net.sf.bvalid.catalog.MemorySchemaCatalog;
-import net.sf.bvalid.catalog.SchemaCatalog;
-import net.sf.bvalid.catalog.SchemaIndex;
-import net.sf.bvalid.locator.CachingSchemaLocator;
-import net.sf.bvalid.locator.SchemaLocator;
-import net.sf.bvalid.locator.URLSchemaLocator;
 
 import org.apache.commons.dbcp.BasicDataSource;
 import org.apache.commons.dbcp.BasicDataSourceFactory;
@@ -154,15 +138,16 @@ public class RecordCache extends Thread {
             backslashIsEscape = false;
         }
 
-        File schemaDir = null;
-        boolean validateUpdates = true;
+//        File schemaDir = null;
+//        boolean validateUpdates = true;
         String vu = props.getProperty(PROP_VALIDATEUPDATES);
         if (vu != null && vu.equalsIgnoreCase("false")) {
             validate = false;
-            validateUpdates = false;
-        } else {
-            schemaDir = new File(getRequiredParam(props, PROP_SCHEMADIR));
-        }
+          //  validateUpdates = false;
+        } 
+//        else {
+//            schemaDir = new File(getRequiredParam(props, PROP_SCHEMADIR));
+//        }
 
         init(pool, 
              ddlc, 
@@ -176,9 +161,7 @@ public class RecordCache extends Thread {
              maxWorkBatchSize,
              maxFailedRetries,
              maxCommitQueueSize,
-             maxRecordsPerTransaction,
-             validateUpdates,
-             schemaDir);
+             maxRecordsPerTransaction);
     }
 
     public RecordCache(BasicDataSource pool,
@@ -193,9 +176,7 @@ public class RecordCache extends Thread {
                        int maxWorkBatchSize,
                        int maxFailedRetries,
                        int maxCommitQueueSize,
-                       int maxRecordsPerTransaction,
-                       boolean validateUpdates,
-                       File schemaDir) throws ServerException {
+                       int maxRecordsPerTransaction) throws ServerException {
         init(pool, 
              ddlc, 
              mySQLTrickling,
@@ -208,9 +189,7 @@ public class RecordCache extends Thread {
              maxWorkBatchSize, 
              maxFailedRetries, 
              maxCommitQueueSize, 
-             maxRecordsPerTransaction,
-             validateUpdates,
-             schemaDir);
+             maxRecordsPerTransaction);
     }
 
     private void init(BasicDataSource pool,
@@ -225,9 +204,7 @@ public class RecordCache extends Thread {
                       int maxWorkBatchSize,
                       int maxFailedRetries,
                       int maxCommitQueueSize,
-                      int maxRecordsPerTransaction,
-                      boolean validateUpdates,
-                      File schemaDir) throws ServerException {
+                      int maxRecordsPerTransaction) throws ServerException {
 
         logger.info("Initializing Record Cache...");
 
@@ -256,28 +233,28 @@ public class RecordCache extends Thread {
         }
 
         // initialize the validator if needed
-        Validator validator = null;
-        if (validateUpdates) {
-
-            // make sure schemaDir exists
-            if (!schemaDir.exists()) {
-                schemaDir.mkdirs();
-                if (!schemaDir.exists()) {
-                    throw new ServerException("Cannot create schema dir: " 
-                            + schemaDir.getPath());
-                }
-            }
-            Map<ValidatorOption, String> opts = new HashMap<ValidatorOption, String>();
-            opts.put(ValidatorOption.CACHE_PARSED_GRAMMARS, "true");
-            try {
-                validator = ValidatorFactory.getValidator(SchemaLanguage.XSD,
-                                                          createLocator(schemaDir),
-                                                          opts);
-            } catch (Exception e) {
-                throw new ServerException("Unable to initialize schema "
-                        + "validator", e);
-            }
-        }
+//        Validator validator = null;
+//        if (validateUpdates) {
+//
+//            // make sure schemaDir exists
+//            if (!schemaDir.exists()) {
+//                schemaDir.mkdirs();
+//                if (!schemaDir.exists()) {
+//                    throw new ServerException("Cannot create schema dir: " 
+//                            + schemaDir.getPath());
+//                }
+//            }
+//            Map<ValidatorOption, String> opts = new HashMap<ValidatorOption, String>();
+//            opts.put(ValidatorOption.CACHE_PARSED_GRAMMARS, "true");
+//            try {
+//                validator = ValidatorFactory.getValidator(SchemaLanguage.XSD,
+//                                                          createLocator(schemaDir),
+//                                                          opts);
+//            } catch (Exception e) {
+//                throw new ServerException("Unable to initialize schema "
+//                        + "validator", e);
+//            }
+//        }
 
         // finally, start the Updater thread
         m_updater = new Updater(m_driver, 
@@ -289,42 +266,41 @@ public class RecordCache extends Thread {
                                 maxWorkBatchSize, 
                                 maxFailedRetries,  
                                 maxCommitQueueSize, 
-                                maxRecordsPerTransaction,
-                                validator);
+                                maxRecordsPerTransaction);
         m_updater.start();
     }
 
-    private SchemaLocator createLocator(File schemaDir) throws Exception {
-
-        SchemaIndex index = new FileSchemaIndex(new File(schemaDir, 
-                                                         "index.dat"));
-        SchemaCatalog cacheCatalog = new DiskSchemaCatalog(index, schemaDir);
-
-        // if not already there, add predefined schemas to cache catalog
-        addToCatalog(cacheCatalog, OAI_RECORD_SCHEMA_URL, "schemas/OAI-PMH-record.xsd");
-        for (int i = 0; i < EXAMPLE_SCHEMAS.length; i++) {
-            addToCatalog(cacheCatalog, 
-                         "http://example.org/" + EXAMPLE_SCHEMAS[i],
-                         "schemas/" + EXAMPLE_SCHEMAS[i]);
-        }
-
-        return new CachingSchemaLocator(new MemorySchemaCatalog(),
-                                        cacheCatalog,
-                                        new URLSchemaLocator());
-    }
-
-    private static void addToCatalog(SchemaCatalog catalog, String url, String path) throws Exception {
-
-        if (!catalog.contains(url)) {
-            InputStream in = null;
-            try {
-                in = RecordCache.class.getClassLoader().getResourceAsStream(path);
-            } catch (Throwable th) {
-                in = ClassLoader.getSystemResourceAsStream(path);
-            }
-            catalog.put(url, in);
-        }
-    }
+//    private SchemaLocator createLocator(File schemaDir) throws Exception {
+//
+//        SchemaIndex index = new FileSchemaIndex(new File(schemaDir, 
+//                                                         "index.dat"));
+//        SchemaCatalog cacheCatalog = new DiskSchemaCatalog(index, schemaDir);
+//
+//        // if not already there, add predefined schemas to cache catalog
+//        addToCatalog(cacheCatalog, OAI_RECORD_SCHEMA_URL, "schemas/OAI-PMH-record.xsd");
+//        for (int i = 0; i < EXAMPLE_SCHEMAS.length; i++) {
+//            addToCatalog(cacheCatalog, 
+//                         "http://example.org/" + EXAMPLE_SCHEMAS[i],
+//                         "schemas/" + EXAMPLE_SCHEMAS[i]);
+//        }
+//
+//        return new CachingSchemaLocator(new MemorySchemaCatalog(),
+//                                        cacheCatalog,
+//                                        new URLSchemaLocator());
+//    }
+//
+//    private static void addToCatalog(SchemaCatalog catalog, String url, String path) throws Exception {
+//
+//        if (!catalog.contains(url)) {
+//            InputStream in = null;
+//            try {
+//                in = RecordCache.class.getClassLoader().getResourceAsStream(path);
+//            } catch (Throwable th) {
+//                in = ClassLoader.getSystemResourceAsStream(path);
+//            }
+//            catalog.put(url, in);
+//        }
+//    }
 
     /**
      * Get a connection from the pool.
