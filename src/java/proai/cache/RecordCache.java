@@ -34,9 +34,9 @@ public class RecordCache extends Thread {
     public static final String OAI_RECORD_SCHEMA_URL 
             = "http://proai.sourceforge.net/schemas/OAI-PMH-record.xsd";
 
-    public static final String[] EXAMPLE_SCHEMAS 
-            = new String[] { "sample.xsd", "test_format.xsd", "my-about.xsd",
-                             "formatX.xsd", "formatY.xsd" };
+//    public static final String[] EXAMPLE_SCHEMAS 
+//            = new String[] { "sample.xsd", "test_format.xsd", "my-about.xsd",
+//                             "formatX.xsd", "formatY.xsd" };
 
     private static final Logger logger =
             Logger.getLogger(RecordCache.class.getName());
