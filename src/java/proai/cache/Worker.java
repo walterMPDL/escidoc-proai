@@ -1,17 +1,13 @@
 package proai.cache;
 
-import java.io.FileInputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Iterator;
 import java.util.List;
 
-import net.sf.bvalid.Validator;
-
 import org.apache.log4j.Logger;
 
 import proai.driver.EscidocAdaptedOAIDriver;
-import proai.driver.OAIDriver;
 import proai.util.StreamUtil;
 
 public class Worker extends Thread {
@@ -21,7 +17,7 @@ public class Worker extends Thread {
     private Updater _updater;
     private EscidocAdaptedOAIDriver _driver;
     private RCDisk _disk;
-    private Validator _validator;
+    //private Validator _validator;
 
     private int _attemptedCount;
     private int _failedCount;
@@ -32,13 +28,12 @@ public class Worker extends Thread {
                   int of, 
                   Updater updater, 
                   EscidocAdaptedOAIDriver driver, 
-                  RCDisk disk,
-                  Validator validator) {
+                  RCDisk disk) {
         super("Worker-" + num + "of" + of);
         _updater = updater;
         _driver = driver;
         _disk = disk;
-        _validator = validator;
+       // _validator = validator;
     }
 
     public void run() {
