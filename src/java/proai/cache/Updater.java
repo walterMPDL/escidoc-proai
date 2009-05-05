@@ -18,8 +18,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.Vector;
 
-import net.sf.bvalid.Validator;
-
 import org.apache.log4j.Logger;
 
 import proai.EscidocAdaptedMetadataFormat;
@@ -47,7 +45,7 @@ public class Updater extends Thread {
     
     private RCDatabase _db;
     private RCDisk _disk;
-    private Validator _validator;
+   // private Validator _validator;
 
     private boolean _shutdownRequested;
     private boolean _immediateShutdownRequested;
@@ -70,8 +68,7 @@ public class Updater extends Thread {
                    int maxWorkBatchSize,
                    int maxFailedRetries,
                    int maxCommitQueueSize,
-                   int maxRecordsPerTransaction,
-                   Validator validator) {
+                   int maxRecordsPerTransaction) {
         _driver = driver;
         _cache = cache;
         _db = db;
@@ -83,7 +80,7 @@ public class Updater extends Thread {
         _maxFailedRetries = maxFailedRetries;
         _maxCommitQueueSize = maxCommitQueueSize;
         _maxRecordsPerTransaction = maxRecordsPerTransaction;
-        _validator = validator;
+        //_validator = validator;
     }
 
     public void run() {
@@ -786,8 +783,7 @@ public class Updater extends Thread {
                                                  _workers.length, 
                                                  this, 
                                                  _driver, 
-                                                 _disk,
-                                                 _validator);
+                                                 _disk);
                         _workers[i].start();
                     }
 
