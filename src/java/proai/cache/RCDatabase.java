@@ -734,8 +734,8 @@ public class RCDatabase {
                 
                 executeUpdate(stmt, "UPDATE rcRecord SET modDate = " + lmd.getTime() + ", "
                                                + "xmlPath = " + qss(xmlPath)
-                                               + "WHERE recordKey = " + recordKey
-                                               + " AND state =" + qs(state));
+                                               + "state =" + qss(state)
+                                               + "WHERE recordKey = " + recordKey);
                 
                 addPrunable(stmt, xmlPathToPrune);
 
