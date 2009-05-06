@@ -210,16 +210,45 @@ public class RCDatabase {
                 if ((!uri.equals(newuri))
                     || (!dissemination.equals(newdissemination))) {
                     logger.info("NsUri or dissemination of the format with prefix " + newprefix
-                        + " changed.  Updating in db: update table rcFormat.");
+                        + " changed.  Updating in db: update table rcFormat, delete all" +
+                                "records of this format from rcRecord, delete membership of these " +
+                                "records from rcMembership.");
                     sql =
                         "UPDATE rcFormat SET namespaceURI = " + qsc(newuri)
                             + "schemaLocation = " + qsc(newloc)
                             + "dissemination  = "
                             + qsc(newdissemination)
+                            // if the format changed we should also set the last
+                            // poll date to
+                            // the initial value: 0 in order to fetch all
+                            // records of this format from repository again
                             + "lastPollDate  = " + 0 + " WHERE formatKey = "
                             + formatKey;
-                    
                     executeUpdate(stmt, sql);
+                    //We can not rely, that all existing records in old format
+                    //will be updated, because escidoc objects have records in 
+                    //different formats.
+                    //Therefore we should remove all existing records now to assure
+                    //that the cache contains no more records in the old format.
+                    // first mark xmlPaths of records in this format as prunable
+                    // and delete set membership for relevant records
+                    String selectRecordKey =
+                        "SELECT recordKey, xmlPath FROM rcRecord WHERE formatKey = "
+                            + formatKey;
+                    Statement newStmt = getStatement(conn, false);
+                    rs1 = executeQuery(newStmt, selectRecordKey);
+                    
+                    while (rs1.next()) {
+                        int recordKey = rs1.getInt(1);
+                        String xmlPathToPrune = rs1.getString(2);
+                        executeUpdate(stmt,
+                            "DELETE from rcMembership WHERE recordKey = "
+                                + recordKey);
+                        addPrunable(stmt, xmlPathToPrune);
+                    }
+                    // then delete the actual records
+                    executeUpdate(stmt,
+                        "DELETE FROM rcRecord WHERE formatKey = " + formatKey);
                     changed = FormatChange.uriOrDissemination;
                 }
                 else if (!loc.equals(newloc)) {
