@@ -3,6 +3,7 @@ package proai.cache;
 import java.io.File;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Enumeration;
 import java.util.Iterator;
@@ -16,9 +17,11 @@ import org.apache.log4j.Logger;
 
 import proai.CloseableIterator;
 import proai.MetadataFormat;
+import proai.MetadataFormat;
 import proai.SetInfo;
 import proai.Writable;
 import proai.driver.EscidocAdaptedOAIDriver;
+import proai.driver.RemoteIterator;
 import proai.error.ServerException;
 import proai.util.DDLConverter;
 import proai.util.StreamUtil;
@@ -34,9 +37,9 @@ public class RecordCache extends Thread {
     public static final String OAI_RECORD_SCHEMA_URL 
             = "http://proai.sourceforge.net/schemas/OAI-PMH-record.xsd";
 
-//    public static final String[] EXAMPLE_SCHEMAS 
-//            = new String[] { "sample.xsd", "test_format.xsd", "my-about.xsd",
-//                             "formatX.xsd", "formatY.xsd" };
+    public static final String[] EXAMPLE_SCHEMAS 
+            = new String[] { "sample.xsd", "test_format.xsd", "my-about.xsd",
+                             "formatX.xsd", "formatY.xsd" };
 
     private static final Logger logger =
             Logger.getLogger(RecordCache.class.getName());
@@ -57,8 +60,8 @@ public class RecordCache extends Thread {
     public static final String PROP_MAXCOMMITQUEUESIZE = pfx + "maxCommitQueueSize";
     public static final String PROP_MAXRECORDSPERTRANS = pfx + "maxRecordsPerTransaction";
     public static final String PROP_SCHEMADIR          = pfx + "schemaDir";
-    public static final String PROP_VALIDATEUPDATES    = pfx + "validateUpdates";
-
+    //public static final String PROP_VALIDATEUPDATES    = pfx + "validateUpdates";
+    public static final String PROP_CACHE_TIMESTAMPS   = pfx + "cacheTimeStamps";
     public static final String PROP_DB_URL             = dbpfx + "url";
     public static final String PROP_DB_DRIVERCLASSNAME = dbpfx + "driverClassName";
     public static final String PROP_DB_MYSQL_TRICKLING = dbpfx + "mySQLResultTrickling";
@@ -73,8 +76,8 @@ public class RecordCache extends Thread {
    
     private RCDatabase m_rcdb;
     private RCDisk m_rcDisk;
-
-    private boolean validate = true;
+    private boolean m_cacheTimeStamps = false;
+   // private boolean validate = true;
     
     public RecordCache(Properties props) throws ServerException {
     
@@ -89,11 +92,10 @@ public class RecordCache extends Thread {
 
         EscidocAdaptedOAIDriver driver;
         try {
-            //driver = (EscidocAdaptedOAIDriver) Class.forName(oaiDriverClassName).newInstance();
             driver = (EscidocAdaptedOAIDriver) Class.forName("escidoc.services.oaiprovider.EscidocOAIDriver").newInstance();
         } catch (Exception e) {
             throw new ServerException("Unable to initialize OAIDriver: " 
-                    + "fedora.services.oaiprovider.EscidocOAIDriver", e);
+                    + "escidoc.services.oaiprovider.EscidocOAIDriver", e);
         }
         driver.init(props);
 
@@ -137,15 +139,19 @@ public class RecordCache extends Thread {
         if (s != null && s.trim().equalsIgnoreCase("false")) {
             backslashIsEscape = false;
         }
-
-//        File schemaDir = null;
-//        boolean validateUpdates = true;
-        String vu = props.getProperty(PROP_VALIDATEUPDATES);
-        if (vu != null && vu.equalsIgnoreCase("false")) {
-            validate = false;
-          //  validateUpdates = false;
+        String cacheTimeStamps = props.getProperty(PROP_CACHE_TIMESTAMPS);
+        if (cacheTimeStamps != null && cacheTimeStamps.equalsIgnoreCase("true")) {
+            m_cacheTimeStamps = true;
         } 
-//        else {
+
+      //  File schemaDir = null;
+       // boolean validateUpdates = true;
+     //   String vu = props.getProperty(PROP_VALIDATEUPDATES);
+       // if (vu != null && vu.equalsIgnoreCase("false")) {
+       //     validate = false;
+     //       validateUpdates = false;
+     //   }
+//        } else {
 //            schemaDir = new File(getRequiredParam(props, PROP_SCHEMADIR));
 //        }
 
@@ -218,7 +224,7 @@ public class RecordCache extends Thread {
         m_baseDir = baseDir;
 
         // this creates baseDir if it doesn't exist yet
-        m_rcDisk = new RCDisk(m_baseDir);
+        m_rcDisk = new RCDisk(m_baseDir, m_cacheTimeStamps);
         logger.debug("Record Cache Initialized");
 
         // init RCDatabase (creates tables if needed)
@@ -233,7 +239,7 @@ public class RecordCache extends Thread {
         }
 
         // initialize the validator if needed
-//        Validator validator = null;
+   //     Validator validator = null;
 //        if (validateUpdates) {
 //
 //            // make sure schemaDir exists
@@ -255,7 +261,11 @@ public class RecordCache extends Thread {
 //                        + "validator", e);
 //            }
 //        }
-
+        
+        MetadataValidator validator = new MetadataValidator();
+        RemoteIterator<? extends MetadataFormat> riter = m_driver.listMetadataFormats();
+        validator.init(riter);
+        m_driver.setValidator(validator);
         // finally, start the Updater thread
         m_updater = new Updater(m_driver, 
                                 this, 
@@ -266,7 +276,8 @@ public class RecordCache extends Thread {
                                 maxWorkBatchSize, 
                                 maxFailedRetries,  
                                 maxCommitQueueSize, 
-                                maxRecordsPerTransaction);
+                                maxRecordsPerTransaction,
+                                validator);
         m_updater.start();
     }
 
@@ -288,7 +299,7 @@ public class RecordCache extends Thread {
 //                                        cacheCatalog,
 //                                        new URLSchemaLocator());
 //    }
-//
+
 //    private static void addToCatalog(SchemaCatalog catalog, String url, String path) throws Exception {
 //
 //        if (!catalog.contains(url)) {
@@ -413,7 +424,7 @@ public class RecordCache extends Thread {
         Connection conn = null;
         try {
             conn = getConnection();
-            Vector<String> info  = m_rcdb.getRecordInfo(conn, identifier, metadataPrefix, validate);
+            Vector<String> info  = m_rcdb.getRecordInfo(conn, identifier, metadataPrefix);
             if (info == null) return null;
             return new WritableWrapper("<GetRecord>\n", 
                                        m_rcDisk.getContent(info.remove(0), info.remove(0), info, false),
@@ -433,7 +444,10 @@ public class RecordCache extends Thread {
             if (path == null) {
                 throw new ServerException("Identify.xml does not yet exist in the cache");
             }
-            return m_rcDisk.getContent(path);
+            Long earliestDate = m_rcdb.getEarliestDatestamp(conn);
+            Date d = new Date(earliestDate);
+            String earliestDatestamp = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'").format(d);
+            return m_rcDisk.getContent(path, earliestDatestamp);
         } catch (SQLException e) {
             throw new ServerException("Error getting a database connection", e);
         } finally {
@@ -500,8 +514,7 @@ public class RecordCache extends Thread {
                                                       from, 
                                                       until, 
                                                       prefix, 
-                                                      set,
-                                                      validate),
+                                                      set),
                                m_rcDisk,
                                identifiers);
         } catch (SQLException e) {
@@ -524,8 +537,7 @@ public class RecordCache extends Thread {
                                          from, 
                                          until, 
                                          prefix, 
-                                         set,
-                                         validate);
+                                         set);
         } catch (SQLException e) {
             throw new ServerException("Error getting a database connection", e);
         }
@@ -606,5 +618,8 @@ public class RecordCache extends Thread {
         
     return m_updater.getUpdateStatus(); 
     }
-
+    
+    public boolean isCacheTimeStamps() {
+     return m_cacheTimeStamps;
+   }
 }

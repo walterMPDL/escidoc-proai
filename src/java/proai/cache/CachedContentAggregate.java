@@ -67,7 +67,7 @@ public class CachedContentAggregate implements Writable {
                             }
                             new CachedContent(m_cache.getFile(parts[0]), 
                                               parts[1], partsVector,
-                                              headersOnly).write(out);
+                                              headersOnly, m_cache.isCacheTimeStamps()).write(out);
                         } else {
                             new CachedContent(m_cache.getFile(parts[0])).write(out);
                         }

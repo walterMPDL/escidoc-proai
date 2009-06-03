@@ -90,7 +90,7 @@ public class ProviderServlet extends HttpServlet {
 
             ResponseData data = null;
             try {
-                if (m_responder.getUpdateStatus().equals("Sleeping")) {
+                //if (m_responder.getUpdateStatus().equals("Sleeping")) {
                 if (verb.equals("GetRecord")) {
                     if (argCount != 2) throw new BadArgumentException("two arguments needed, got " + argCount);
                     data = m_responder.getRecord(identifier, metadataPrefix);
@@ -117,31 +117,31 @@ public class ProviderServlet extends HttpServlet {
                 response.setContentType("text/xml; charset=UTF-8");
                 PrintWriter writer = response.getWriter();
                 writer.print(getResponseStart(url, verb, identifier, from, until, metadataPrefix, set, resumptionToken, null));
-                data.write(response.getWriter());
+                data.write(writer);
                 writer.println("</OAI-PMH>");
                 writer.flush();
                 writer.close();
-                } else {
-                    
-                    //TODO: may be different response state?
-                    response.setStatus(HttpServletResponse.SC_OK);
-                    response.setContentType("text/html; charset=UTF-8");
-                    PrintWriter writer = response.getWriter();
-                   // writer.print(getResponseStart(url, verb, identifier, from, until, metadataPrefix, set, resumptionToken, null));
-                    writer.print("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\""
-                    + "\"http://www.w3.org/TR/html4/strict.dtd\">");
-                    writer.print("<html>");
-                    writer.print("<head>");
-                    writer.print("<title>Cache is updating</title>");
-                    writer.print("</head>");
-                    writer.print("<body>");
-                    writer.print("<h1>Cache is updating. Please try later.</h1>");
-                    writer.print("</body>");
-                    writer.print("</html>");
-                    //writer.println("</OAI-PMH>");
-                    writer.flush();
-                    writer.close();    
-                }
+//                } else {
+//                    
+//                    //TODO: may be different response state?
+//                    response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+//                    response.setContentType("text/html; charset=UTF-8");
+//                    PrintWriter writer = response.getWriter();
+//                   // writer.print(getResponseStart(url, verb, identifier, from, until, metadataPrefix, set, resumptionToken, null));
+//                    writer.print("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\""
+//                    + "\"http://www.w3.org/TR/html4/strict.dtd\">");
+//                    writer.print("<html>");
+//                    writer.print("<head>");
+//                    writer.print("<title>Cache is updating</title>");
+//                    writer.print("</head>");
+//                    writer.print("<body>");
+//                    writer.print("<h1>Cache is updating. Please try later.</h1>");
+//                    writer.print("</body>");
+//                    writer.print("</html>");
+//                    //writer.println("</OAI-PMH>");
+//                    writer.flush();
+//                    writer.close();    
+//                }
             } finally {
                 if (data != null) {
                     try {

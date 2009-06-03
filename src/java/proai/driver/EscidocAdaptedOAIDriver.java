@@ -7,12 +7,11 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
 
-import javax.xml.validation.Schema;
-
-import proai.EscidocAdaptedMetadataFormat;
+import proai.MetadataFormat;
 import proai.Record;
 import proai.SetInfo;
 import proai.Writable;
+import proai.cache.MetadataValidator;
 import proai.cache.ValidationInfo;
 import proai.error.RepositoryException;
 
@@ -66,7 +65,7 @@ public interface EscidocAdaptedOAIDriver extends Writable {
      *
      * @see proai.MetadataFormat
      */
-    public RemoteIterator<? extends EscidocAdaptedMetadataFormat> listMetadataFormats() throws RepositoryException;
+    public RemoteIterator<? extends MetadataFormat> listMetadataFormats() throws RepositoryException;
 
     /**
      * Get an iterator over a list of SetInfo objects representing all
@@ -107,7 +106,7 @@ public interface EscidocAdaptedOAIDriver extends Writable {
     
     
     /**
-     * Write the XML of the record whose source info is given.
+     * Validate and write the XML of the record whose source info is given.
      *
      * SourceInfo MUST NOT contain newlines. Otherwise, the format is up to the 
      * implementation.
@@ -129,8 +128,9 @@ public interface EscidocAdaptedOAIDriver extends Writable {
      * Release any resources held by the driver.
      */
     public void close() throws RepositoryException;
-
-    public void updateStart();
-    
-    public ValidationInfo validate(String mdPrefix, String xml);
+ /**
+  * Set a validator to validate meta data.
+  * @param validator
+  */
+    public void setValidator(MetadataValidator validator);
 }

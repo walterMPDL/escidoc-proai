@@ -167,8 +167,9 @@ public class Committer extends Thread {
             // in the transaction.  This obviously can't be exact, so we put 
             // it into the future by a few seconds to be on the safe side.
             Date cacheCommitDate = new Date(StreamUtil.nowUTC().getTime() + 5000);
-            //Not needed, because the right date is already in the data base
-           // _db.setUncommittedRecordDates(conn, cacheCommitDate);
+            //needed to deliver records according cache update time and not according original 
+            //time stamps
+            _db.setUncommittedRecordDates(conn, cacheCommitDate);
 
             // finally, commit
             conn.commit();
@@ -225,31 +226,41 @@ public class Committer extends Thread {
 
         _db.removeFromQueue(conn, item.getQueueKey());
         if (item.succeeded()) {
-            if (!item.getState().equals("notexist")) {
-                _db.putRecord(conn, item.getParsedRecord(), _formatKeyMap, item.getState());
-            } 
+            _db.putRecord(conn, item.getParsedRecord(), _formatKeyMap, item
+                .getState());
             if (item.getQueueSource() == 'F') {
-                
+
                 _db.removeFailure(conn, item.getIdentifier(), item
                     .getMDPrefix());
             }
-            
+
         }
         else {
-            int oldFailCount =
-                _db
-                    .getFailCount(conn, item.getIdentifier(), item
-                        .getMDPrefix());
+            if ((item.getState()!= null) && (item.getState().equals("invalid"))) {
+                //delete a previous valid version of the record from the cache if exists
+                _db.deleteRecordIfExist(conn, item.getIdentifier(), item
+                    .getMDPrefix());
 
-            if (oldFailCount == -1) {
-                _db.addFailure(conn, item.getIdentifier(), item.getMDPrefix(),
-                    item.getSourceInfo(), item.getFailDate(), item
-                        .getFailReason());
+                if (item.getQueueSource() == 'F') {
+                    _db.removeFailure(conn, item.getIdentifier(), item
+                        .getMDPrefix());
+                }
             }
             else {
-                _db.updateFailure(conn, item.getIdentifier(), item
-                    .getMDPrefix(), item.getSourceInfo(), oldFailCount + 1,
-                    item.getFailDate(), item.getFailReason());
+                int oldFailCount =
+                    _db.getFailCount(conn, item.getIdentifier(), item
+                        .getMDPrefix());
+
+                if (oldFailCount == -1) {
+                    _db.addFailure(conn, item.getIdentifier(), item
+                        .getMDPrefix(), item.getSourceInfo(), item
+                        .getFailDate(), item.getFailReason());
+                }
+                else {
+                    _db.updateFailure(conn, item.getIdentifier(), item
+                        .getMDPrefix(), item.getSourceInfo(), oldFailCount + 1,
+                        item.getFailDate(), item.getFailReason());
+                }
             }
         }
     }

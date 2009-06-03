@@ -27,5 +27,9 @@ public class MetadataFormatImpl implements MetadataFormat {
     public String getSchemaLocation() {
         return m_schemaLocation;
     }
+    
+    public String getDissemination() {
+        return "";
+    }
 
 }

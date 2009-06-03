@@ -7,7 +7,9 @@ import java.util.List;
 
 import org.apache.log4j.Logger;
 
+import proai.MetadataFormat;
 import proai.driver.EscidocAdaptedOAIDriver;
+import proai.driver.RemoteIterator;
 import proai.util.StreamUtil;
 
 public class Worker extends Thread {
@@ -17,23 +19,27 @@ public class Worker extends Thread {
     private Updater _updater;
     private EscidocAdaptedOAIDriver _driver;
     private RCDisk _disk;
-    //private Validator _validator;
+    private MetadataValidator _validator;
+    
 
     private int _attemptedCount;
     private int _failedCount;
     private long _totalFetchTime;
     private long _totalValidationTime;
 
+
     public Worker(int num, 
-                  int of, 
-                  Updater updater, 
-                  EscidocAdaptedOAIDriver driver, 
-                  RCDisk disk) {
+        int of, 
+        Updater updater, 
+        EscidocAdaptedOAIDriver driver, 
+        RCDisk disk,
+        MetadataValidator validator) {
         super("Worker-" + num + "of" + of);
         _updater = updater;
         _driver = driver;
         _disk = disk;
-       // _validator = validator;
+        _validator = validator;
+      
     }
 
     public void run() {
@@ -64,48 +70,48 @@ public class Worker extends Thread {
         long validationDelay = 0;
         ValidationInfo validationInfo = null;
         try {
+                diskWriter = _disk.getNewWriter();
 
-            diskWriter = _disk.getNewWriter();
+                long startFetchTime = System.currentTimeMillis();
+                validationInfo =
+                    _driver.writeRecordXML(qi.getIdentifier(),
+                        qi.getMDPrefix(), qi.getSourceInfo(), diskWriter);
+                if (validationInfo != null) {
+                    if (validationInfo.getResult().equals(
+                        ValidationResult.valid)) {
+                        validationDelay = validationInfo.getValidationDelay();
+                    }
+                    qi.setState(validationInfo.getResult().toString());
+                }
+                else {
+                    // Record is a 'deleted' record
+                    qi.setState(ValidationResult.valid.toString());
+                }
+                diskWriter.flush();
+                diskWriter.close();
 
-            long startFetchTime = System.currentTimeMillis();
-            validationInfo = _driver.writeRecordXML(qi.getIdentifier(),
-                                   qi.getMDPrefix(),
-                                   qi.getSourceInfo(), 
-                                   diskWriter);
-            if (validationInfo != null){
-                if (validationInfo.getResult().equals(ValidationResult.valid)) { 
-                    validationDelay = validationInfo.getValidationDelay();
-                } 
-                qi.setState(validationInfo.getResult().toString());
-            } else {
-                //Record is in state 'deleted'
-                qi.setState(ValidationResult.valid.toString());
-            }
-            diskWriter.flush();
-            diskWriter.close();
+                long endFetchTime = System.currentTimeMillis();
 
-            long endFetchTime = System.currentTimeMillis();
+                retrievalDelay = endFetchTime - startFetchTime;
 
-            retrievalDelay = endFetchTime - startFetchTime;
-
-//            if (_validator != null) {
-//                _validator.validate(new FileInputStream(diskWriter.getFile()),
-//                                    RecordCache.OAI_RECORD_SCHEMA_URL);
-//                validationDelay = System.currentTimeMillis() - endFetchTime;
-//            }
-            if (!qi.getState().equals("notexist")) {
-            qi.setParsedRecord(new ParsedRecord(qi.getIdentifier(),
-                                                qi.getMDPrefix(),
-                                                diskWriter.getPath(),
-                                                diskWriter.getFile(),
-                                                qi.getSourceInfo()));
-            }
-
-            qi.setSucceeded(true);
-
-            _LOG.info("Successfully processed record");
-
-        } catch (Throwable th) {
+                if (!validationInfo
+                    .getResult().equals(ValidationResult.invalid)) {
+                    qi.setParsedRecord(new ParsedRecord(qi.getIdentifier(), qi
+                        .getMDPrefix(), diskWriter.getPath(), diskWriter
+                        .getFile(), qi.getSourceInfo()));
+                    qi.setSucceeded(true);
+                }
+                else {
+                    if (diskWriter != null) {
+                        diskWriter.close();
+                        diskWriter.getFile().delete();
+                    }
+                }
+                if (validationInfo.getResult().equals(ValidationResult.valid)) {
+                    _LOG.info("Successfully processed record");
+                }
+        }
+        catch (Throwable th) {
 
             _LOG.warn("Failed to process record", th);
 
@@ -119,12 +125,18 @@ public class Worker extends Thread {
             qi.setFailReason(failReason.toString());
             qi.setFailDate(StreamUtil.nowUTCString());
             _failedCount++;
-        } finally {
+        }
+        finally {
             if (validationInfo != null) {
-                if (validationInfo.getResult().equals(ValidationResult.invalid)
-                    || validationInfo.getResult().equals(ValidationResult.undefined)) {    
-                    _LOG.warn("Failed to validate record", validationInfo.getFailReason());
-                    _failedCount++;   
+                if (validationInfo.getResult().equals(
+                    ValidationResult.wrongSchemaLocation)
+                    || validationInfo.getResult().equals(
+                        ValidationResult.connectionFailure)
+                    || validationInfo.getResult().equals(
+                        ValidationResult.invalid)) {
+                    _LOG.warn("Failed to validate record", validationInfo
+                        .getFailReason());
+                    _failedCount++;
                 }
             }
             _attemptedCount++;

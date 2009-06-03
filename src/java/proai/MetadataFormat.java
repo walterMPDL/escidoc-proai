@@ -7,5 +7,7 @@ public interface MetadataFormat {
     public String getNamespaceURI();
 
     public String getSchemaLocation();
+    
+    public String getDissemination();
 
 }

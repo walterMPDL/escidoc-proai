@@ -8,11 +8,13 @@ public class CachedMetadataFormat implements MetadataFormat {
     private String m_prefix;
     private String m_namespaceURI;
     private String m_schemaLocation;
+    private String m_dissemination;
 
     public CachedMetadataFormat(int key,
                               String prefix,
                               String namespaceURI,
-                              String schemaLocation) {
+                              String schemaLocation,
+                              String dissemination) {
         m_key = key;
         m_prefix = prefix;
         m_namespaceURI = namespaceURI;
@@ -33,6 +35,10 @@ public class CachedMetadataFormat implements MetadataFormat {
 
     public String getSchemaLocation() {
         return m_schemaLocation;
+    }
+    
+    public String getDissemination() {
+        return m_dissemination;
     }
 
 }

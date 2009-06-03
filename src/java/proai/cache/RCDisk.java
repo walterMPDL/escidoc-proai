@@ -21,9 +21,11 @@ public class RCDisk {
 
     private File m_baseDir;
     private long _lastPathDate;
+    private boolean _cacheTimeStamp;
 
-    public RCDisk(File baseDir) {
+    public RCDisk(File baseDir, boolean isCacheTimeStamp) {
         m_baseDir = baseDir;
+        _cacheTimeStamp = isCacheTimeStamp;
         if (!m_baseDir.exists()) {
             m_baseDir.mkdirs();
         }
@@ -93,10 +95,16 @@ public class RCDisk {
         if (path == null) return null;
         return new CachedContent(getFile(path));
     }
+    
+    //Same as getContent, but re-writes the <earliestDatestamp>
+    public CachedContent getContent(String path, String earliestDateStamp) {
+        if (path == null) return null;
+        return new CachedContent(getFile(path), earliestDateStamp);
+    }
 
     // Same as getContent, but re-writes the <datestamp> and optionally only returns the header
     public CachedContent getContent(String path, String dateStamp, Vector<String> setSpecs, boolean headerOnly) {
-        return new CachedContent(getFile(path), dateStamp, setSpecs, headerOnly);
+        return new CachedContent(getFile(path), dateStamp, setSpecs, headerOnly, _cacheTimeStamp);
     }
     public void delete(String path) {
         new File(m_baseDir, path).delete();

@@ -20,12 +20,13 @@ import proai.SetInfo;
 import org.apache.log4j.Logger;
 
 import proai.CloseableIterator;
-import proai.EscidocAdaptedMetadataFormat;
+import proai.MetadataFormat;
 import proai.driver.impl.RemoteIteratorImpl;
 import proai.driver.impl.SetInfoImpl;
 import proai.error.ServerException;
 import proai.util.DBUtil;
 import proai.util.DDLConverter;
+import proai.util.StreamUtil;
 import proai.util.TableSpec;
 
 /**
@@ -112,6 +113,28 @@ public class RCDatabase {
         }
     }
 
+    /**
+     * Get the value of the earlistDateStamp, or
+     * <code>null</code> if earlistDateStamp is null (first update cycle hasn't run).
+     */
+    public long getEarliestDatestamp(Connection conn) throws ServerException {
+        Statement stmt = null;
+        ResultSet rs = null;
+        try {
+            stmt = getStatement(conn, false);
+            rs = executeQuery(stmt, "SELECT earliestDatestamp FROM rcAdmin");
+            if (rs.next()) {
+                return rs.getLong(1);
+            } else {
+                throw new ServerException(RCADMIN_TABLE_IS_EMPTY);
+            }
+        } catch (SQLException e) {
+            throw new ServerException("Error reading rcAdmin.earliestDatestamp", e);
+        } finally {
+            if (rs != null) try { rs.close(); } catch (Exception e) { }
+            if (stmt != null) try { stmt.close(); } catch (Exception e) { }
+        }
+    }
     private Statement getStatement(Connection conn,
                                    boolean possiblyLong) throws SQLException {
         if (m_mySQLTrickling && possiblyLong) {
@@ -183,123 +206,150 @@ public class RCDatabase {
     /**
      * Add or modify the given format.
      */
-    public FormatChange putFormat(Connection conn, EscidocAdaptedMetadataFormat format)
-        throws ServerException {
-        FormatChange changed = null;
-        String newprefix = format.getPrefix();
-        String newuri = format.getNamespaceURI();
-        String newloc = format.getSchemaLocation();
-        String newdissemination = format.getDissemination();
-        Statement stmt = null;
-        ResultSet rs = null;
-        ResultSet rs1 = null;
-        try {
-            stmt = getStatement(conn, false);
-            String sql =
-                "SELECT formatKey, namespaceURI, schemaLocation, dissemination "
-                    + "FROM rcFormat " + "WHERE mdPrefix = " + qs(newprefix);
-            rs = executeQuery(stmt, sql);
-            
-            if (rs.next()) {
-                // If nsUri or dissemination of the format changed we should also set the last poll date
-                // to the initial value 0 in order to update all exist records.
-                int formatKey = rs.getInt(1);
-                String uri = rs.getString(2);
-                String loc = rs.getString(3);
-                String dissemination = rs.getString(4);
-                if ((!uri.equals(newuri))
-                    || (!dissemination.equals(newdissemination))) {
-                    logger.info("NsUri or dissemination of the format with prefix " + newprefix
-                        + " changed.  Updating in db: update table rcFormat, delete all" +
-                                "records of this format from rcRecord, delete membership of these " +
-                                "records from rcMembership.");
-                    sql =
-                        "UPDATE rcFormat SET namespaceURI = " + qsc(newuri)
-                            + "schemaLocation = " + qsc(newloc)
-                            + "dissemination  = "
-                            + qsc(newdissemination)
-                            // if the format changed we should also set the last
-                            // poll date to
-                            // the initial value: 0 in order to fetch all
-                            // records of this format from repository again
-                            + "lastPollDate  = " + 0 + " WHERE formatKey = "
-                            + formatKey;
-                    executeUpdate(stmt, sql);
-                    //We can not rely, that all existing records in old format
-                    //will be updated, because escidoc objects have records in 
-                    //different formats.
-                    //Therefore we should remove all existing records now to assure
-                    //that the cache contains no more records in the old format.
-                    // first mark xmlPaths of records in this format as prunable
-                    // and delete set membership for relevant records
-                    String selectRecordKey =
-                        "SELECT recordKey, xmlPath FROM rcRecord WHERE formatKey = "
-                            + formatKey;
-                    Statement newStmt = getStatement(conn, false);
-                    rs1 = executeQuery(newStmt, selectRecordKey);
-                    
-                    while (rs1.next()) {
-                        int recordKey = rs1.getInt(1);
-                        String xmlPathToPrune = rs1.getString(2);
-                        executeUpdate(stmt,
-                            "DELETE from rcMembership WHERE recordKey = "
-                                + recordKey);
-                        addPrunable(stmt, xmlPathToPrune);
-                    }
-                    // then delete the actual records
-                    executeUpdate(stmt,
-                        "DELETE FROM rcRecord WHERE formatKey = " + formatKey);
-                    changed = FormatChange.uriOrDissemination;
-                }
-                else if (!loc.equals(newloc)) {
-                    logger.info("Schema location of the format with prefix "  + newprefix
-                        + " changed.  Updating in rcFormat.");
-                    sql =
-                        "UPDATE rcFormat SET schemaLocation = " + qss(newloc)
-                            + " WHERE formatKey = " + formatKey;
-                    executeUpdate(stmt, sql);
-                    changed = FormatChange.schemaLocation;
-                }
-                
-            }
-            else {
-                logger.info("Format " + newprefix + " is new.  Adding to db.");
+    public FormatChange putFormat(Connection conn, MetadataFormat format)
+    throws ServerException {
+    FormatChange changed = null;
+    String newprefix = format.getPrefix();
+    String newuri = format.getNamespaceURI();
+    String newloc = format.getSchemaLocation();
+    String newdissemination = format.getDissemination();
+    Statement stmt = null;
+    Statement stmt2 = null;
+    Statement newStmt = null;
+    ResultSet rs = null;
+    ResultSet rs1 = null;
+    try {
+        stmt = getStatement(conn, false);
+        String sql =
+            "SELECT formatKey, namespaceURI, schemaLocation, dissemination "
+                + "FROM rcFormat " + "WHERE mdPrefix = " + qs(newprefix);
+        rs = executeQuery(stmt, sql);
+
+        if (rs.next()) {
+            // If nsUri or dissemination of the format changed we should
+            // also set the last poll date
+            // to the initial value 0 in order to re-cache all records in
+            // this format.
+            int formatKey = rs.getInt(1);
+            String uri = rs.getString(2);
+            String loc = rs.getString(3);
+            String dissemination = rs.getString(4);
+            if ((!uri.equals(newuri))
+                || (!dissemination.equals(newdissemination))) {
+                logger
+                    .info("NsUri or dissemination of the format with prefix "
+                        + newprefix
+                        + " changed.  Updating in db: update table rcFormat, delete all"
+                        + "records of this format from rcRecord, delete membership of these "
+                        + "records from rcMembership.");
                 sql =
-                    "INSERT INTO rcFormat (mdPrefix, " + "namespaceURI, "
-                        + "schemaLocation, dissemination) " + "VALUES (" + qsc(newprefix)
-                        + qsc(newuri) + qsc(newloc) + qs(newdissemination) + ")";
+                    "UPDATE rcFormat SET namespaceURI = " + qsc(newuri)
+                        + "schemaLocation = " + qsc(newloc)
+                        + "dissemination  = " + qsc(newdissemination)
+                        + "lastPollDate  = " + 0 + " WHERE formatKey = "
+                        + formatKey;
                 executeUpdate(stmt, sql);
+
+                // We should remove all existing records in the old format
+                // and entries
+                // referencing the old format from the tables rcqueue and
+                // rcfailure.
+
+                stmt2 = getStatement(conn, false);
+                String deleteFromQueue =
+                    "DELETE from rcQueue WHERE mdPrefix = '" + newprefix
+                        + "'";
+                executeUpdate(stmt2, deleteFromQueue);
+
+                String deleteFromFailure =
+                    "DELETE from rcFailure WHERE mdPrefix = '" + newprefix
+                        + "'";
+                executeUpdate(stmt2, deleteFromFailure);
+
+                // first mark xmlPaths of records in this format as prunable
+                // and delete set membership for relevant records
+                String selectRecordKey =
+                    "SELECT recordKey, xmlPath FROM rcRecord WHERE formatKey = "
+                        + formatKey;
+                newStmt = getStatement(conn, false);
+                rs1 = executeQuery(newStmt, selectRecordKey);
+
+                while (rs1.next()) {
+                    int recordKey = rs1.getInt(1);
+                    String xmlPathToPrune = rs1.getString(2);
+                    executeUpdate(stmt,
+                        "DELETE from rcMembership WHERE recordKey = "
+                            + recordKey);
+                    addPrunable(stmt, xmlPathToPrune);
+                }
+                // then delete the actual records
+                executeUpdate(stmt,
+                    "DELETE FROM rcRecord WHERE formatKey = " + formatKey);
+                changed = FormatChange.uriOrDissemination;
             }
+            else if (!loc.equals(newloc)) {
+                logger.info("Schema location of the format with prefix "
+                    + newprefix + " changed.  Updating in rcFormat.");
+                sql =
+                    "UPDATE rcFormat SET schemaLocation = " + qss(newloc)
+                        + " WHERE formatKey = " + formatKey;
+                executeUpdate(stmt, sql);
+                changed = FormatChange.schemaLocation;
+            }
+
         }
-        catch (SQLException se) {
-            throw new ServerException(
-                "Unable to add/modify format in cache db", se);
+        else {
+            logger.info("Format " + newprefix + " is new.  Adding to db.");
+            sql =
+                "INSERT INTO rcFormat (mdPrefix, " + "namespaceURI, "
+                    + "schemaLocation, dissemination) " + "VALUES ("
+                    + qsc(newprefix) + qsc(newuri) + qsc(newloc)
+                    + qs(newdissemination) + ")";
+            executeUpdate(stmt, sql);
         }
-        finally {
-            if (rs != null)
-                try {
-                    rs.close();
-                }
-                catch (Exception ex) {
-                }
-            if (rs1 != null)
-                try {
-                    rs1.close();
-                    }
-                catch (Exception ex) {
-                    }
-            if (stmt != null)
-                try {
-                    stmt.close();
-                }
-                catch (Exception ex) {
-                }
-        }
-        if(changed != null) {
-            return changed;
-        }
-        return FormatChange.nothing;
     }
+    catch (SQLException se) {
+        throw new ServerException(
+            "Unable to add/modify format in cache db", se);
+    }
+    finally {
+        if (rs != null)
+            try {
+                rs.close();
+            }
+            catch (Exception ex) {
+            }
+        if (rs1 != null)
+            try {
+                rs1.close();
+            }
+            catch (Exception ex) {
+            }
+        if (stmt != null)
+            try {
+                stmt.close();
+            }
+            catch (Exception ex) {
+            }
+        if (stmt2 != null)
+            try {
+                stmt2.close();
+            }
+            catch (Exception ex) {
+            }
+        if (newStmt != null)
+            try {
+                newStmt.close();
+            }
+            catch (Exception ex) {
+            }
+    }
+    if (changed != null) {
+        return changed;
+    }
+    return FormatChange.nothing;
+}
+
 
     public long getEarliestPollDate(Connection conn) throws ServerException {
         try {
@@ -353,7 +403,8 @@ public class RCDatabase {
             stmt = getStatement(conn, true);
             rs = executeQuery(stmt, query);
             if (rs.next()) {
-                return rs.getLong(1);
+                Long d = rs.getLong(1);
+                return d;
             } else {
                 return 0;
             }
@@ -375,10 +426,10 @@ public class RCDatabase {
             stmt = getStatement(conn, false);
             String query;
             if (identifier == null) {
-                query = "SELECT formatKey, mdPrefix, namespaceURI, schemaLocation "
+                query = "SELECT formatKey, mdPrefix, namespaceURI, schemaLocation, dissemination "
                         + "FROM rcFormat";
             } else {
-                query = "SELECT rcFormat.formatKey, rcFormat.mdPrefix, rcFormat.namespaceURI, rcFormat.schemaLocation "
+                query = "SELECT rcFormat.formatKey, rcFormat.mdPrefix, rcFormat.namespaceURI, rcFormat.schemaLocation, rcFormat.dissemination "
                         + "FROM rcFormat, rcItem, rcRecord "
                        + "WHERE rcItem.identifier = " + qss(identifier)
                          + "AND rcRecord.itemKey = rcItem.itemKey "
@@ -386,7 +437,7 @@ public class RCDatabase {
             }
             rs = executeQuery(stmt, query);
             while (rs.next()) {
-                list.add(new CachedMetadataFormat(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4)));
+                list.add(new CachedMetadataFormat(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5)));
             }
             return list;
         } catch (SQLException e) {
@@ -411,47 +462,195 @@ public class RCDatabase {
         return map;
     }
 
-    public void deleteFormat(Connection conn, 
-                             String prefix) throws ServerException {
+    public void deleteFormat(Connection conn, String prefix)
+    throws ServerException {
+    Statement stmt = null;
+    Statement stmt1 = null;
+    ResultSet rs = null;
+    ResultSet rs1 = null;
+    try {
+        logger.info("Deleting format: " + prefix);
+        stmt = getStatement(conn, false);
+        rs =
+            executeQuery(stmt,
+                "SELECT formatKey FROM rcFormat WHERE mdPrefix = "
+                    + qs(prefix));
+        if (rs.next()) {
+            int formatKey = rs.getInt(1);
+            executeUpdate(stmt, "DELETE FROM rcFormat WHERE formatKey = "
+                + formatKey);
+            rs.close();
+            // first mark xmlPaths of records in this format as prunable
+            // and delete set membership for relevant records
+            stmt1 = getStatement(conn, false);
+            String selectRecordKey =
+                "SELECT recordKey, xmlPath FROM rcRecord WHERE formatKey = "
+                    + formatKey;
+            rs1 = executeQuery(stmt1, selectRecordKey);
+            while (rs1.next()) {
+                int recordKey = rs1.getInt(1);
+                String xmlPathToPrune = rs1.getString(2);
+                executeUpdate(stmt,
+                    "DELETE from rcMembership WHERE recordKey = "
+                        + recordKey);
+                addPrunable(stmt, xmlPathToPrune);
+            }
+            // then delete the actual records
+            executeUpdate(stmt, "DELETE FROM rcRecord WHERE formatKey = "
+                + formatKey);
+        }
+        else {
+            throw new ServerException(
+                "Format does not exist in rcFormat table: " + prefix);
+        }
+
+        // remove entries referencing this format from the tables rcqueue
+        // and rcfailure.
+
+        String deleteFromQueue =
+            "DELETE from rcQueue WHERE mdPrefix = '" + prefix + "'";
+        executeUpdate(stmt, deleteFromQueue);
+
+        String deleteFromFailure =
+            "DELETE from rcFailure WHERE mdPrefix = '" + prefix + "'";
+        executeUpdate(stmt, deleteFromFailure);
+    }
+    catch (SQLException e) {
+        throw new ServerException("Error deleting format: " + prefix, e);
+    }
+    finally {
+        if (rs != null)
+            try {
+                rs.close();
+            }
+            catch (Exception e) {
+            }
+            if (rs1 != null)
+                try {
+                    rs1.close();
+                }
+                catch (Exception e) {
+                }
+        if (stmt != null)
+            try {
+                stmt.close();
+            }
+            catch (Exception e) {
+            }
+            if (stmt1 != null)
+                try {
+                    stmt1.close();
+                }
+                catch (Exception e) {
+                }
+    }
+}
+    public void deleteRecordIfExist(
+        Connection conn, String itemId, String mdPrefix) {
         Statement stmt = null;
-        Statement stmt1 = null;
         ResultSet rs = null;
         ResultSet rs1 = null;
+        ResultSet rs2 = null;
         try {
-            logger.info("Deleting format: " + prefix);
             stmt = getStatement(conn, false);
-            rs = executeQuery(stmt, "SELECT formatKey FROM rcFormat WHERE mdPrefix = " + qs(prefix));
-            if (rs.next()) {
-                int formatKey = rs.getInt(1);
-                executeUpdate(stmt, "DELETE FROM rcFormat WHERE formatKey = " + formatKey);
-                
-                // first mark xmlPaths of records in this format as prunable
-                // and delete set membership for relevant records
-                String selectRecordKey = "SELECT recordKey, xmlPath FROM rcRecord WHERE formatKey = " + formatKey;
-                stmt1 = getStatement(conn, false);
-                rs1 = executeQuery(stmt1, selectRecordKey);
-                while (rs1.next()) {
-                    int recordKey = rs1.getInt(1);
-                    String xmlPathToPrune = rs1.getString(2);
-                    executeUpdate(stmt, "DELETE from rcMembership WHERE recordKey = " + recordKey);
-                    addPrunable(stmt, xmlPathToPrune);
-                    
-                }
-                // then delete the actual records
-                executeUpdate(stmt, "DELETE FROM rcRecord WHERE formatKey = " + formatKey);
-            } else {
-                throw new ServerException("Format does not exist in rcFormat table: " + prefix);
+            rs2 =
+                executeQuery(stmt,
+                    "SELECT formatKey FROM rcFormat WHERE mdPrefix = '"
+                        + mdPrefix + "'");
+            int formatKey = 0;
+            if (rs2.next()) {
+                formatKey = rs2.getInt(1);
             }
-        } catch (SQLException e) {
-            throw new ServerException("Error deleting format: " + prefix, e);
-        } finally {
-            if (rs != null) try { rs.close(); } catch (Exception e) { }
-            if (rs1 != null) try { rs1.close(); } catch (Exception e) { }
-            if (stmt != null) try { stmt.close(); } catch (Exception e) { }
-            if (stmt1 != null) try { stmt1.close(); } catch (Exception e) { }
+            else {
+                String message =
+                    "Format for the prefix " + mdPrefix + " is mising.";
+                logger.error(message);
+                throw new ServerException(message);
+            }
+
+            rs =
+                executeQuery(stmt,
+                    "SELECT itemKey FROM rcItem WHERE identifier = '" + itemId
+                        + "'");
+            int itemKey = 0;
+            if (rs.next()) {
+                itemKey = rs.getInt(1);
+                rs1 =
+                    executeQuery(stmt,
+                        "SELECT recordKey, xmlPath FROM rcRecord WHERE itemKey = "
+                            + itemKey + " AND formatKey = " + formatKey);
+                if (rs1.next()) {
+                    int recordKey = rs1.getInt(1);
+                    String xmlPath = rs1.getString(2);
+                    deleteRecord(conn, recordKey, xmlPath);
+                }
+            }
+
+        }
+        catch (SQLException e) {
+            throw new ServerException("Error deleting record", e);
+        }
+        finally {
+            if (rs != null)
+                try {
+                    rs.close();
+                }
+                catch (Exception e) {
+                }
+                if (rs1 != null)
+                    try {
+                        rs1.close();
+                    }
+                    catch (Exception e) {
+                    }
+                    if (rs2 != null)
+                        try {
+                            rs2.close();
+                        }
+                        catch (Exception e) {
+                        }
+            if (stmt != null)
+                try {
+                    stmt.close();
+                }
+                catch (Exception e) {
+                }
         }
     }
-
+    
+    public void deleteRecord(Connection conn, int recordKey, String xmlPath)
+    throws ServerException {
+    Statement stmt = null;
+    ResultSet rs = null;
+    try {
+        logger.info("Deleting record: " + recordKey);
+        stmt = getStatement(conn, false);
+        executeUpdate(stmt, "DELETE from rcMembership WHERE recordKey = "
+            + recordKey);
+        addPrunable(stmt, xmlPath);
+        // then delete the actual record
+        executeUpdate(stmt, "DELETE FROM rcRecord WHERE recordKey = "
+            + recordKey);
+    }
+    catch (SQLException e) {
+        throw new ServerException("Error deleting record with key: "
+            + recordKey, e);
+    }
+    finally {
+        if (rs != null)
+            try {
+                rs.close();
+            }
+            catch (Exception e) {
+            }
+        if (stmt != null)
+            try {
+                stmt.close();
+            }
+            catch (Exception e) {
+            }
+    }
+}
     public void putSetInfo(Connection conn, String setSpec, String xmlPath) throws ServerException {
 
         Statement stmt = null;
@@ -759,10 +958,13 @@ public class RCDatabase {
                 // and mark the old xmlPath path as prunable
                 
                 
-                //Patch: set lmd date to the release Date
+              //workaround: modDate is set to NULL, and will be set to the commit time stamp shortly before the commit
+                //in order to deliver records without a time lag caused by caching
+                //when OAI-PMH protocol will be extended to allow inform a harvester about a real request
+                //time range, modDate should be set to lmd.getTime()
                 
-                executeUpdate(stmt, "UPDATE rcRecord SET modDate = " + lmd.getTime() + ", "
-                                               + "xmlPath = " + qss(xmlPath)
+                executeUpdate(stmt, "UPDATE rcRecord SET modDate = NULL, "
+                                               + "xmlPath = " + qsc(xmlPath)
                                                + "state =" + qss(state)
                                                + "WHERE recordKey = " + recordKey);
                 
@@ -809,9 +1011,12 @@ public class RCDatabase {
             } else {
                 // we're creating it
                 rs.close();
-                
+                //workaround: modDate is set to NULL, and will be set to the commit time stamp shortly before the commit
+                //in order to deliver records without a time lag caused by caching
+                //when OAI-PMH protocol will be extended to allow inform a harvester about a real request
+                //time range, modDate should be set to lmd.getTime()
                 executeUpdate(stmt, "INSERT INTO rcRecord (itemKey, formatKey, modDate, xmlPath, state) "
-                        + "VALUES (" + itemKey + ", " + formatKey + ", " + lmd.getTime() + ", " + qs(xmlPath) 
+                        + "VALUES (" + itemKey + ", " + formatKey + ", NULL, " + qs(xmlPath) 
                         +  ", " +  qs(state) + ")");
                 
                 rs = executeQuery(stmt, "SELECT recordKey from rcRecord "
@@ -839,8 +1044,8 @@ public class RCDatabase {
         }
     }
     
-  public void putRecordState(
-        String recordKey, String state, Connection conn) {
+    public void changeRecordState(
+        int recordKey, String state, Connection conn) {
         Statement stmt = null;
         try {
             stmt = getStatement(conn, false);
@@ -861,7 +1066,7 @@ public class RCDatabase {
                 }
         }
     }
-  
+    
     public int[] getSetKeys(Statement stmt, List<String> specs) throws ServerException {
         ResultSet rs = null;
         try {
@@ -933,8 +1138,7 @@ public class RCDatabase {
     // path, datestring
     public Vector<String> getRecordInfo(Connection conn,
                                   String itemID,
-                                  String mdPrefix,
-                                  boolean valid) throws ServerException {
+                                  String mdPrefix) throws ServerException {
         Statement stmt = null;
         ResultSet rs = null;
         Vector<String> result = new Vector<String>();
@@ -944,10 +1148,9 @@ public class RCDatabase {
                 + "WHERE rcItem.identifier = " + qss(itemID)
                 + "AND rcItem.itemKey = rcRecord.itemKey "
                 + "AND rcRecord.formatKey = rcFormat.formatKey "
-                + "AND rcFormat.mdPrefix = " + qs(mdPrefix);
-            if (valid) {
-             query = query + " AND state = 'valid'";
-            }
+                + "AND rcFormat.mdPrefix = " + qss(mdPrefix)
+                + "AND state = 'valid'";
+            
             rs = executeQuery(stmt, query);
             
             
@@ -1005,7 +1208,7 @@ public class RCDatabase {
     // In particular, if this method does NOT return an iterator
     // that is attached to a ResultSet, it must release the connection.
     public CloseableIterator<Vector<String>> findRecordInfo(
-        Connection conn, Date from, Date until, String prefix, String set, boolean valid)
+        Connection conn, Date from, Date until, String prefix, String set)
         throws ServerException {
         // since the database is in milliseconds, but the given date is
         // in seconds, we need to check for the case where from == until, and
@@ -1113,11 +1316,9 @@ public class RCDatabase {
                 query.append(" AND rcRecord.modDate >= " + from.getTime());
                 query.append(" AND rcRecord.modDate <= " + until.getTime());
             }
-            if (valid) {
-                query.append(" AND state = 'valid'");
-            }
-            //query.append(" ORDER BY rcRecord.recordKey ASC");
-
+            
+            query.append(" AND state = 'valid'");
+            
             rs = executeQuery(stmt, query.toString());
             releaseConnectionBeforeReturning = false;
 
@@ -1266,9 +1467,15 @@ public class RCDatabase {
             if (e.getMessage().equals(RCADMIN_TABLE_IS_EMPTY)) {
                 Statement stmt = null;
                 try {
+                 // set the estimated earliest date for all added/modified records
+                 // in the cache data base.  
+                    Date earlistDate = new Date(StreamUtil.nowUTC().getTime() + 5000);
                     stmt = getStatement(conn, false);
                     executeUpdate(stmt,
-                        "INSERT INTO rcAdmin (pollingEnabled) VALUES (1)");
+                        "INSERT INTO rcAdmin (pollingEnabled, earliestDatestamp) VALUES (1, "
+                        + earlistDate.getTime() + ")");
+                    
+                    
                 }
                 catch (SQLException se) {
                     throw new ServerException(
@@ -1522,16 +1729,16 @@ public class RCDatabase {
     }
     
     
-    public HashMap<String, String> getFormatUndefinedRecords(Connection conn, String formatPrefix) {
-        HashMap<String, String> records = new HashMap<String, String>();
+    public HashMap<Integer, String> getFormatRecordsInConnectionFailureState(Connection conn, String formatPrefix) {
+        HashMap<Integer, String> records = new HashMap<Integer, String>();
         Statement stmt = null;
         ResultSet rs = null;
         try {
             stmt = getStatement(conn, false);
             rs = executeQuery(stmt, "SELECT rcRecord.recordKey, rcRecord.xmlPath FROM rcRecord, rcFormat WHERE rcRecord.formatKey = rcFormat.formatKey" +
-                    " AND rcFormat.mdPrefix=" + qs(formatPrefix) + " AND rcRecord.state='undefined'");
+                    " AND rcFormat.mdPrefix=" + qs(formatPrefix) + " AND rcRecord.state='connectionFailure'");
             while (rs.next()) {
-                String recordKey = rs.getString(1);
+                int recordKey = rs.getInt(1);
                 String xmlPath = rs.getString(2);
                 records.put(recordKey, xmlPath);
             }
@@ -1545,20 +1752,21 @@ public class RCDatabase {
     }
     
     
-    public HashMap<String, String[]> getFormatRecords(Connection conn, String formatPrefix) {
-        HashMap<String, String[]> records = new HashMap<String, String[]>();
+    public HashMap<Integer, String[]> getFormatRecordsInNotValidState(Connection conn, String formatPrefix) {
+        HashMap<Integer, String[]> records = new HashMap<Integer, String[]>();
         Statement stmt = null;
         ResultSet rs = null;
         try {
             stmt = getStatement(conn, false);
             rs = executeQuery(stmt, "SELECT rcRecord.recordKey, rcRecord.xmlPath, rcRecord.state FROM rcRecord, rcFormat WHERE rcRecord.formatKey = rcFormat.formatKey" +
-            		" AND rcFormat.mdPrefix=" + qs(formatPrefix));
+                    " AND rcFormat.mdPrefix=" + qss(formatPrefix)
+                  + "AND (rcRecord.state='connectionFailure' OR rcRecord.state='wrongSchemaLocation')");
             while (rs.next()) {
                 String [] recordInfo = new String [2];
-                String recordKey = rs.getString(1);
+                int recordKey = rs.getInt(1);
                 recordInfo[0] = rs.getString(2);
                 recordInfo[1] = rs.getString(3);
-                records.put(recordKey, recordInfo);
+                records.put(new Integer(recordKey), recordInfo);
             }
             return records;
         } catch (SQLException e) {

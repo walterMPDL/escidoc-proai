@@ -20,7 +20,7 @@ import java.util.Vector;
 
 import org.apache.log4j.Logger;
 
-import proai.EscidocAdaptedMetadataFormat;
+import proai.MetadataFormat;
 import proai.Record;
 import proai.SetInfo;
 import proai.driver.EscidocAdaptedOAIDriver;
@@ -45,7 +45,7 @@ public class Updater extends Thread {
     
     private RCDatabase _db;
     private RCDisk _disk;
-   // private Validator _validator;
+    private MetadataValidator _validator;
 
     private boolean _shutdownRequested;
     private boolean _immediateShutdownRequested;
@@ -59,16 +59,28 @@ public class Updater extends Thread {
     private HashMap<String, SetInfo> newUserDefinedSetsMap;
     
 
+//    public Updater(EscidocAdaptedOAIDriver driver,
+//                   RecordCache cache,
+//                   RCDatabase db,
+//                   RCDisk disk,
+//                   int pollSeconds,
+//                   int maxWorkers,
+//                   int maxWorkBatchSize,
+//                   int maxFailedRetries,
+//                   int maxCommitQueueSize,
+//                   int maxRecordsPerTransaction,
+//                   Validator validator) {
     public Updater(EscidocAdaptedOAIDriver driver,
-                   RecordCache cache,
-                   RCDatabase db,
-                   RCDisk disk,
-                   int pollSeconds,
-                   int maxWorkers,
-                   int maxWorkBatchSize,
-                   int maxFailedRetries,
-                   int maxCommitQueueSize,
-                   int maxRecordsPerTransaction) {
+      RecordCache cache,
+      RCDatabase db,
+      RCDisk disk,
+      int pollSeconds,
+      int maxWorkers,
+      int maxWorkBatchSize,
+      int maxFailedRetries,
+      int maxCommitQueueSize,
+      int maxRecordsPerTransaction,
+      MetadataValidator validator) {
         _driver = driver;
         _cache = cache;
         _db = db;
@@ -80,7 +92,7 @@ public class Updater extends Thread {
         _maxFailedRetries = maxFailedRetries;
         _maxCommitQueueSize = maxCommitQueueSize;
         _maxRecordsPerTransaction = maxRecordsPerTransaction;
-        //_validator = validator;
+        _validator = validator;
     }
 
     public void run() {
@@ -92,7 +104,7 @@ public class Updater extends Thread {
             _LOG.info("Update cycle initiated");
 
             try {
-                _driver.updateStart();
+                _validator.updateStart();
 
                 // It's important to do this first because old items may have
                 // been left in the queue due to an immediate or improper
@@ -251,33 +263,34 @@ public class Updater extends Thread {
     }
 
     
-    private void revalidateRecordsInUndefinedState(String formatPrefix, Connection conn){
-        _LOG.info("Started revalidate records in state 'undefined' of format " + formatPrefix);
-        HashMap<String, String> records = _db.getFormatUndefinedRecords(conn, formatPrefix);
-        Set<String> recordKeys = records.keySet();
-        Iterator<String> iterator = recordKeys.iterator();
+    private void revalidateRecordsInConnectionFailureState(String formatPrefix, Connection conn){
+        _LOG.info("Started revalidate records in state 'connectionFailure' of format " + formatPrefix);
+        HashMap<Integer, String> records = _db.getFormatRecordsInConnectionFailureState(conn, formatPrefix);
+        Set<Integer> recordKeys = records.keySet();
+        Iterator<Integer> iterator = recordKeys.iterator();
         while(iterator.hasNext()) {
-            String recordKey = iterator.next();
+            Integer recordKey = iterator.next();
             String xmlPath = records.get(recordKey);
             readAndValidateRecordFile(recordKey, xmlPath, formatPrefix, 
-                ValidationResult.undefined.toString(), conn);      
+                ValidationResult.connectionFailure.toString(), conn);      
     }
-        _LOG.info("Finished revalidate records in state 'undefined' of format " + formatPrefix);
+        _LOG.info("Finished revalidate records in state 'connectionFailure' of format " + formatPrefix);
     }
-    private void reValidateAllRecords(String formatPrefix, Connection conn){
-        _LOG.info("Started revalidate all records of format " + formatPrefix);
-        HashMap<String, String[]> records = _db.getFormatRecords(conn, formatPrefix);
-        Set<String> recordKeys = records.keySet();
-        Iterator<String> iterator = recordKeys.iterator();
+    private void reValidateRecordsInNotValidState(String formatPrefix, Connection conn){
+        _LOG.info("Started revalidate not valid records of format " + formatPrefix);
+        HashMap<Integer, String[]> records = _db.getFormatRecordsInNotValidState(conn, formatPrefix);
+        Set<Integer> recordKeys = records.keySet();
+        Iterator<Integer> iterator = recordKeys.iterator();
         while(iterator.hasNext()) {
-            String recordKey = iterator.next();
+            Integer recordKey = iterator.next();
             String[] recordInfo = records.get(recordKey);
             String state = recordInfo[1];
-            readAndValidateRecordFile(recordKey, recordInfo[0], formatPrefix, state, conn);      
+            readAndValidateRecordFile(recordKey.intValue(), recordInfo[0], formatPrefix, state, conn);      
     }
-        _LOG.info("Finished revalidate all records of format " + formatPrefix);
+        _LOG.info("Finished revalidate not valid records of format " + formatPrefix);
     }
-    private void readAndValidateRecordFile(String recordKey, String xmlPath, String formatPrefix,
+    
+    private void readAndValidateRecordFile(Integer recordKey, String xmlPath, String formatPrefix,
         String state, Connection conn) {
         File recordFile = _cache.getFile(xmlPath);
         ValidationInfo validationInfo = null;
@@ -301,9 +314,12 @@ public class Updater extends Thread {
                 String xml = content.substring(startIndex, endIndex);
                 xml = xml.trim();
                 validationInfo =
-                    _driver.validate(formatPrefix, xml);
-                if (!validationInfo.getResult().toString().equals(state)) {
-                    _db.putRecordState(recordKey, validationInfo
+                    _validator.validate(formatPrefix, xml);
+                
+                if (validationInfo.getResult().equals(ValidationResult.invalid)) {
+                    _db.deleteRecord(conn, recordKey.intValue(), xmlPath);
+                } else if (!validationInfo.getResult().toString().equals(state)) {
+                    _db.changeRecordState(recordKey.intValue(), validationInfo
                         .getResult().toString(), conn);
                 } 
                 if (!validationInfo.getResult().equals(
@@ -327,6 +343,7 @@ public class Updater extends Thread {
                     }
             }
     }
+
     private void adaptNewSetsMembership() throws ServerException {
         Connection conn = null;
         boolean startedTransaction = false;
@@ -509,23 +526,23 @@ public class Updater extends Thread {
      * <p>This will add any new formats, modify any changed formats,
      * and delete any no-longer-existing formats (and associated records).
      */
-    private List updateFormats(Connection conn) throws Exception {
+    private List<String> updateFormats(Connection conn) throws Exception {
 
         _LOG.info("Updating metadata formats...");
 
         // apply new / updated
-        RemoteIterator<? extends EscidocAdaptedMetadataFormat> riter = _driver.listMetadataFormats();
+        RemoteIterator<? extends MetadataFormat> riter = _driver.listMetadataFormats();
         List<String> newPrefixes = new ArrayList<String>();
         try {
             while (riter.hasNext()) {
 
                 checkImmediateShutdown();
-                EscidocAdaptedMetadataFormat format = (EscidocAdaptedMetadataFormat) riter.next();
+                MetadataFormat format = (MetadataFormat) riter.next();
                 FormatChange change = _db.putFormat(conn, format);
                 if(change.equals(FormatChange.schemaLocation)) {
-                    reValidateAllRecords(format.getPrefix(), conn);
+                    reValidateRecordsInNotValidState(format.getPrefix(), conn);
                 } else if (change.equals(FormatChange.nothing)){
-                    revalidateRecordsInUndefinedState(format.getPrefix(), conn);
+                    revalidateRecordsInConnectionFailureState(format.getPrefix(), conn);
                 }
                 newPrefixes.add(format.getPrefix());
             }
@@ -783,7 +800,8 @@ public class Updater extends Thread {
                                                  _workers.length, 
                                                  this, 
                                                  _driver, 
-                                                 _disk);
+                                                 _disk,
+                                                 _validator);
                         _workers[i].start();
                     }
 
