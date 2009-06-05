@@ -57,6 +57,7 @@ public class Updater extends Thread {
     private String _status;
     
     private HashMap<String, SetInfo> newUserDefinedSetsMap;
+    private HashMap<String, SetInfo> currentUserDefinedSets = null;
     
 
 //    public Updater(EscidocAdaptedOAIDriver driver,
@@ -96,6 +97,23 @@ public class Updater extends Thread {
     }
 
     public void run() {
+        boolean repositoryStarted = false;
+        while (!repositoryStarted) {
+            try {
+                // check if a Search Service is running
+                _driver.getLatestDate();
+                // check if a Escidoc repository is running
+                currentUserDefinedSets =
+                    _driver.retrieveUserDefinedSetList(true);
+
+                repositoryStarted = true;
+            }
+            catch (Throwable e) {
+                _LOG.warn("Underlying repository is not running. ");
+                try { Thread.sleep(120000); } catch (Exception e1) { }
+            }
+            
+        }
         _status = "Started";
         while (!_shutdownRequested) {
 
@@ -435,8 +453,6 @@ public class Updater extends Thread {
                     existSetSpecs.add(existSet.getSetSpec());
                 }
                 
-                HashMap<String, SetInfo> currentUserDefinedSets =
-                    _driver.retrieveUserDefinedSetList(true);
                 Set<String> currentUserDefinedSetSpecs = currentUserDefinedSets.keySet();
                 Iterator<String> currentUserDefinedSetSpecsIterator = currentUserDefinedSetSpecs.iterator();
                 while (currentUserDefinedSetSpecsIterator.hasNext()) {
