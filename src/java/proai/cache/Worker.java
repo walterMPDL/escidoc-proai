@@ -94,8 +94,7 @@ public class Worker extends Thread {
 
                 retrievalDelay = endFetchTime - startFetchTime;
 
-                if (!validationInfo
-                    .getResult().equals(ValidationResult.invalid)) {
+                if (!qi.getState().equals("invalid")) {
                     qi.setParsedRecord(new ParsedRecord(qi.getIdentifier(), qi
                         .getMDPrefix(), diskWriter.getPath(), diskWriter
                         .getFile(), qi.getSourceInfo()));
@@ -107,7 +106,7 @@ public class Worker extends Thread {
                         diskWriter.getFile().delete();
                     }
                 }
-                if (validationInfo.getResult().equals(ValidationResult.valid)) {
+                if (qi.getState().equals("valid")) {
                     _LOG.info("Successfully processed record");
                 }
         }
