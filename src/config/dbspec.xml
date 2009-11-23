@@ -12,6 +12,9 @@
     <column name="identifyPath"    type="varchar(28)"  notNull="false">
       The location of the Identify.xml file in the cache.
     </column>
+     <column name="earliestDatestamp"    type="bigint"  notNull="false">
+     The date stamp of the first PROAI update
+     </column>
   </table>
  
   <table name="rcItem" primaryKey="itemKey" type="InnoDB">
@@ -43,7 +46,6 @@
       </comment>
     </column>
   </table>
-  
   
   <table name="rcSet" primaryKey="setKey" type="InnoDB">
     <column name="setKey"         type="int(11)"                                        autoIncrement="true"/>
