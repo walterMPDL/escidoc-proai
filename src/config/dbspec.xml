@@ -25,7 +25,7 @@
     <column name="formatKey"      type="int(11)"      notNull="true" index="formatKey"/>
     <column name="modDate"        type="bigint"       notNull="false" index="modDate"/>
     <column name="xmlPath"        type="varchar(28)"  notNull="true" index="xmlPath"/>
-    <column name="state"          type="varchar(10)"   notNull="true"/>
+    <column name="state"          type="varchar(20)"   notNull="true"/>
   </table>
   
   <table name="rcFormat" primaryKey="formatKey" type="InnoDB">
@@ -43,6 +43,7 @@
       </comment>
     </column>
   </table>
+  
   
   <table name="rcSet" primaryKey="setKey" type="InnoDB">
     <column name="setKey"         type="int(11)"                                        autoIncrement="true"/>
