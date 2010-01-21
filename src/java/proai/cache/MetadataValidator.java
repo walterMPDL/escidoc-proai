@@ -112,7 +112,7 @@ public class MetadataValidator {
             malformedSchemaUrl.put(mdPrefix, e1);
         }
         if (schemaUrl != null) {
-            InputStream schemaStream1 = null;
+            InputStream schemaStream1 =  null;
             InputStream schemaStream2 = null;
             try {
                 URLConnection conn1 = schemaUrl.openConnection();
@@ -123,32 +123,43 @@ public class MetadataValidator {
             catch (IOException e1) {
                 if (e1 instanceof FileNotFoundException) {
                     failedFileNotFoundCache.put(mdPrefix, e1);
-                } else {
+                }
+                else {
                     failedConnectCache.put(mdPrefix, e1);
-                }  
+                }
             }
             if (schemaStream1 != null && schemaStream2 != null) {
                 String formatNameSpaceUri = format.getNamespaceURI();
                 String targetNameSpace = null;
-                try {
-                    targetNameSpace = getTargetNameSpace(schemaStream2);
-                }
-                catch (RepositoryException e) {
-                    failedParseSchemaCache.put(mdPrefix, e);
-                }
-                if ((targetNameSpace == null)
-                    || (!targetNameSpace.equals(formatNameSpaceUri))) {
-                    String message =
-                        "name space uri '" + formatNameSpaceUri
-                            + "' of the format with prefix " + mdPrefix
-                            + " differs from target name space "
-                            + targetNameSpace + "of a schema located at "
-                            + format.getSchemaLocation();
-                    wrongTargetNamespaceCache.put(mdPrefix,
-                        new RepositoryException(message));
+                URL formatNameSpaceUriURL = null;
+                if (formatNameSpaceUri != null) {
+                    try {
+                        formatNameSpaceUriURL = new URL(formatNameSpaceUri);
+                    }
+                    catch (MalformedURLException e1) {
 
+                    }
                 }
+                if (formatNameSpaceUriURL != null) {
+                    try {
+                        targetNameSpace = getTargetNameSpace(schemaStream2);
+                    }
+                    catch (RepositoryException e) {
+                        failedParseSchemaCache.put(mdPrefix, e);
+                    }
+                    if ((targetNameSpace == null)
+                        || (!targetNameSpace.equals(formatNameSpaceUri))) {
+                        String message =
+                            "name space uri '" + formatNameSpaceUri
+                                + "' of the format with prefix " + mdPrefix
+                                + " differs from target name space "
+                                + targetNameSpace + "of a schema located at "
+                                + format.getSchemaLocation();
+                        wrongTargetNamespaceCache.put(mdPrefix,
+                            new RepositoryException(message));
 
+                    }
+                }
                 try {
                     Schema schema = getSchema(schemaStream1);
                     schemaCache.put(mdPrefix, schema);
