@@ -107,12 +107,12 @@ public class Worker extends Thread {
                     }
                 }
                 if (qi.getState().equals("valid")) {
-                    _LOG.info("Successfully processed record");
+                    _LOG.info("Successfully processed record " + qi.getIdentifier() + " " + qi.getMDPrefix());
                 }
         }
         catch (Throwable th) {
 
-            _LOG.warn("Failed to process record", th);
+            _LOG.warn("Failed to process record " + qi.getIdentifier() + " " + qi.getMDPrefix(), th);
 
             if (diskWriter != null) {
                 diskWriter.close();
@@ -133,7 +133,7 @@ public class Worker extends Thread {
                         ValidationResult.connectionFailure)
                     || validationInfo.getResult().equals(
                         ValidationResult.invalid)) {
-                    _LOG.warn("Failed to validate record", validationInfo
+                    _LOG.warn("Failed to validate record of Item  " + qi.getIdentifier() + " " + qi.getMDPrefix(), validationInfo
                         .getFailReason());
                     _failedCount++;
                 }
