@@ -436,7 +436,7 @@ public class RecordCache extends Thread {
         }
     }
 
-    public Writable getIdentifyContent() throws ServerException {
+    public Writable getIdentifyContent(String requestUrl) throws ServerException {
         Connection conn = null;
         try {
             conn = getConnection();
@@ -447,7 +447,7 @@ public class RecordCache extends Thread {
             Long earliestDate = m_rcdb.getEarliestDatestamp(conn);
             Date d = new Date(earliestDate);
             String earliestDatestamp = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'").format(d);
-            return m_rcDisk.getContent(path, earliestDatestamp);
+            return m_rcDisk.getContent(path, earliestDatestamp, requestUrl);
         } catch (SQLException e) {
             throw new ServerException("Error getting a database connection", e);
         } finally {

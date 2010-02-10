@@ -19,15 +19,17 @@ public class CachedContent implements Writable {
     private boolean m_headerOnly;
     private boolean m_cacheTimeStamps;
     private String m_earliestDateStamp;
+    private String m_baseUrl;
     private String m_string;
     private Vector<String> m_setSpecs = null; 
     public CachedContent(File file) {
         m_file = file;
     }
 
-    public CachedContent(File file, String earliestDateStamp) {
+    public CachedContent(File file, String earliestDateStamp, String baseUrl) {
         m_file = file;
         m_earliestDateStamp = earliestDateStamp;
+        m_baseUrl = baseUrl;
         
     }
     public CachedContent(File file, String dateStamp, Vector<String> setSpecs,
@@ -91,6 +93,9 @@ public class CachedContent implements Writable {
             //replace a real earlistDateStamp of the repository with a earliest cache update time stamp
             String fixed = identifyBuffer.toString().replaceFirst(
                 "earliestDatestamp>[^<]+<", "earliestDatestamp>" + m_earliestDateStamp + "<");
+            //replace a base url with a base url fetched from a request
+            fixed = fixed.replaceFirst(
+                "baseURL>[^<]+<", "baseURL>" + m_baseUrl + "<");
             out.println(fixed);
         } catch (Exception e) {
             throw new ServerException("Error reading from file: " + m_file.getPath(), e);

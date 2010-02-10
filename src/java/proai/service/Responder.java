@@ -156,12 +156,12 @@ public class Responder {
      *
      * @throws ServerException if a low-level (non-protocol) error occurred.
      */
-    public ResponseData identify() throws ServerException {
+    public ResponseData identify(String requestUrl) throws ServerException {
 
         logger.debug("Entered identify()");
 
         try {
-            ResponseData data = new ResponseDataImpl(m_cache.getIdentifyContent());
+            ResponseData data = new ResponseDataImpl(m_cache.getIdentifyContent(requestUrl));
             return data;
         } finally {
             logger.debug("Exiting identify()");

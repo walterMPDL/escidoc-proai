@@ -97,9 +97,9 @@ public class RCDisk {
     }
     
     //Same as getContent, but re-writes the <earliestDatestamp>
-    public CachedContent getContent(String path, String earliestDateStamp) {
+    public CachedContent getContent(String path, String earliestDateStamp, String requestUrl) {
         if (path == null) return null;
-        return new CachedContent(getFile(path), earliestDateStamp);
+        return new CachedContent(getFile(path), earliestDateStamp, requestUrl);
     }
 
     // Same as getContent, but re-writes the <datestamp> and optionally only returns the header
