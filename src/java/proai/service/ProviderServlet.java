@@ -99,19 +99,8 @@ public class ProviderServlet extends HttpServlet {
                     if (argCount != 0)
                         throw new BadArgumentException(
                             "zero arguments needed, got " + argCount);
-                    String scheme = request.getScheme();
-                    String host = request.getServerName();
-                    int port = request.getServerPort();
-                    String contextPath = request.getContextPath();
-                    String servletPath = request.getServletPath();
-                    String pathInfo = request.getPathInfo();
-                    String requestUrl =
-                        scheme + "://" + host + ":" + port + contextPath
-                            + servletPath;
-                    if (pathInfo != null) {
-                        url += pathInfo;
-                    }
-                    data = m_responder.identify(requestUrl);
+
+                    data = m_responder.identify(url);
                 }
                 else if (verb.equals("ListIdentifiers")) {
                     if (identifier != null)
