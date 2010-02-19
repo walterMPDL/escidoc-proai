@@ -49,9 +49,6 @@
     <copy todir="build/classes">
       <fileset dir="src/config"/>
     </copy>
-    <copy todir="build/classes/schemas">
-      <fileset dir="src/schemas"/>
-    </copy>
     <copy file="src/java/proai/Proai.properties"
           tofile="build/classes/proai/Proai.properties"/>
     <propertyfile file="build/version.properties">
