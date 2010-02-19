@@ -102,7 +102,7 @@ public class ResponderTest extends TestCase {
     public void testIdentify() throws Exception {
         ResponseData data = null;
         try {
-            data = m_responder.identify();
+            data = m_responder.identify("url");
             if (m_print) printResult("identify()", data);
         } finally {
             if (data != null) try { data.release(); } catch (Exception e) { }
