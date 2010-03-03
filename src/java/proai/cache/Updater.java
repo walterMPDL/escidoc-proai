@@ -108,7 +108,10 @@ public class Updater extends Thread {
         while (!repositoryStarted) {
             try {
                 // check if a Search Service is running
-                _driver.getLatestDate();
+                Date date = _driver.getLatestDate();
+                if (date == null) {
+                    _LOG.warn("The search service is not running or the index escidocoaipmh_all is empty. ");   
+                }
             }
             catch (Throwable e) {
                 _LOG.warn("The search service is not running or the index escidocoaipmh_all is empty. ", e);
