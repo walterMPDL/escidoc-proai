@@ -281,8 +281,14 @@ public class ProviderServlet extends HttpServlet {
             InputStream propStream =
                 this.getClass().getResourceAsStream("/proai.properties");
             if (propStream == null) {
-                throw new IOException(
-                    "Error loading configuration: /proai.properties not found in classpath");
+                logger.info("Error loading configuration: /proai.properties not found in classpath");
+                logger.info("loading configuration: /proai.default.properties");
+                propStream =
+                    this.getClass().getResourceAsStream("/proai.default.properties");
+                if (propStream == null) {
+                    throw new IOException(
+                    "Error loading configuration: /proai.default.properties not found in classpath");
+                }
             }
             Properties props = new Properties();
             props.load(propStream);
