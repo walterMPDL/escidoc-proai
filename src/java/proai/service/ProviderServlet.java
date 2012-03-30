@@ -1,7 +1,13 @@
 package proai.service;
 
-import java.io.*;
-import java.util.*;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintWriter;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -277,27 +283,38 @@ public class ProviderServlet extends HttpServlet {
     private Responder m_responder;
 
     public void init() throws ServletException {
-        try {
-            InputStream propStream =
-                this.getClass().getResourceAsStream("/proai.properties");
-            if (propStream == null) {
-                logger.info("Error loading configuration: /proai.properties not found in classpath");
-                logger.info("loading configuration: /proai.default.properties");
-                propStream =
-                    this.getClass().getResourceAsStream("/proai.default.properties");
-                if (propStream == null) {
-                    throw new IOException(
-                    "Error loading configuration: /proai.default.properties not found in classpath");
-                }
-            }
-            Properties props = new Properties();
-            props.load(propStream);
-            init(props);
-        }
-        catch (Exception e) {
-            throw new ServletException("Unable to initialize ProviderServlet",
-                e);
-        }
+		try {
+			InputStream propStream = this.getClass().getResourceAsStream(
+					"/proai.properties");
+			if (propStream == null) {
+				String escidocHome = System.getenv("ESCIDOC_HOME");
+				if (escidocHome == null) {
+					escidocHome = System.getProperty("ESCIDOC_HOME");
+				}
+				if (escidocHome != null && !escidocHome.isEmpty()) {
+					try {
+						propStream = new FileInputStream(escidocHome + "/conf/proai.properties");
+					}
+					catch (Exception e) {}
+				}
+				if (propStream == null) {
+					logger.info("Error loading configuration: /proai.properties not found in classpath");
+					logger.info("loading configuration: /proai.default.properties");
+					propStream = this.getClass().getResourceAsStream(
+							"/proai.default.properties");
+					if (propStream == null) {
+						throw new IOException(
+								"Error loading configuration: /proai.default.properties not found in classpath");
+					}
+				}
+			}
+			Properties props = new Properties();
+			props.load(propStream);
+			init(props);
+		} catch (Exception e) {
+			throw new ServletException("Unable to initialize ProviderServlet",
+					e);
+		}
     }
 
     public void init(Properties props) throws ServerException {
