@@ -59,6 +59,8 @@ public class Updater extends Thread {
     private boolean _shutdownRequested;
 
     private boolean _immediateShutdownRequested;
+    
+    private boolean repositoryStarted;
 
     private QueueIterator _queueIterator;
 
@@ -104,7 +106,7 @@ public class Updater extends Thread {
     }
 
     public void run() {
-        boolean repositoryStarted = false;
+        repositoryStarted = false;
         while (!repositoryStarted) {
             try {
                 // check if a Search Service is running
@@ -314,6 +316,7 @@ public class Updater extends Thread {
         if (this.isAlive()) {
 
             _shutdownRequested = true;
+            repositoryStarted = true;
             _immediateShutdownRequested = immediate;
 
             while (this.isAlive()) {
