@@ -806,12 +806,12 @@ public class RCDatabase {
                     "SELECT rcmembership.recordkey FROM rcmembership "
                         + " where rcmembership.setKey = " + currentSetKey);
             Vector<Integer> existRecordKeys = new Vector<Integer>();
-            Iterator<Integer> existRecordKeysIterator =
-                existRecordKeys.iterator();
 
             while (rs.next()) {
                 existRecordKeys.add(new Integer(rs.getInt(1)));
             }
+            Iterator<Integer> existRecordKeysIterator =
+                    existRecordKeys.iterator();
             rs.close();
 
             Iterator<Integer> currentRecordKeysIterator =
