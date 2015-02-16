@@ -246,8 +246,8 @@ public class Responder {
 
         if (resumptionToken == null) {
 
-            Date fromDate = validDate(from);
-            Date untilDate = validDate(until);
+            Date fromDate = validDateFrom(from);
+            Date untilDate = validDateUntil(until);
             checkGranularity(from, until);
             checkFromUntil(fromDate, untilDate);
             checkMetadataPrefix(metadataPrefix);
@@ -445,7 +445,7 @@ public class Responder {
      * Validation ensures that the string is in one of the two formats
      * recognized by the protocol.
      */
-    private static Date validDate(String dateString) throws BadArgumentException {
+    private static Date validDateFrom(String dateString) throws BadArgumentException {
         if (dateString == null) return null; 
         DateFormat parser;
         if (dateString.length() == 10) {
@@ -458,6 +458,28 @@ public class Responder {
         } catch (Exception e) {
             throw new BadArgumentException(ERR_DATE_FORMAT);
         }
+    }
+    
+    /**
+     * Parse and return a <code>Date</code> for the given string, or return
+     * <code>null</code> if the string is <code>null</code>.
+     *
+     * Validation ensures that the string is in one of the two formats
+     * recognized by the protocol. As this is for until dates time is set 
+     * to 23:59:59
+     */
+    private static Date validDateUntil(String dateString) throws BadArgumentException {
+    	if (dateString == null) return null; 
+    	DateFormat parser;
+    	if (dateString.length() == 10) {
+    		dateString += "T23:59:59Z";
+    	}
+    	parser = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+    	try {
+    		return parser.parse(dateString);
+    	} catch (Exception e) {
+    		throw new BadArgumentException(ERR_DATE_FORMAT);
+    	}
     }
 
     /**

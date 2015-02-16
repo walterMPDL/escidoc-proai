@@ -71,6 +71,7 @@ public class ParsedRecord extends DefaultHandler implements Record {
             SAXParser parser = spf.newSAXParser();
             parser.parse(new FileInputStream(file), this);
         } catch (Exception e) {
+        	e.printStackTrace();
             if (_LOG.isDebugEnabled() && file.exists()) {
                 try {
                     String xml = StreamUtil.getString(new FileInputStream(file), "UTF-8");
