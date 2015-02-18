@@ -432,7 +432,7 @@ public class Updater extends Thread {
         while (newUserDefinedSetInfosIterator.hasNext()) {
             SetInfo curentSetInfo = newUserDefinedSetInfosIterator.next();
             String curentSpec = curentSetInfo.getSetSpec();
-            Vector<String> resourceIds =
+            List<String> resourceIds =
                 _driver.retrieveIdsForSetQuery(curentSpec);
             if (resourceIds != null) {
                 try {

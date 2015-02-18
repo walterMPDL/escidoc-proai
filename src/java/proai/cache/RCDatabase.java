@@ -754,40 +754,14 @@ public class RCDatabase {
     
     
     public void putSetMembership(
-        Connection conn, String curentSpec, Vector<String> resourceIds) {
+        Connection conn, String curentSpec, List<String> resourceIds) {
         Statement stmt = null;
         ResultSet rs = null;
         try {
            
             logger.info("Updating user defined set membership: " + curentSpec);
             stmt = getStatement(conn, true);
-            StringBuffer itemIdPartBuffer = new StringBuffer();
-            Iterator<String> resourceIdsIterator = resourceIds.iterator();
-            int i = 0;
-            while (resourceIdsIterator.hasNext()) {
-                String resourceId = resourceIdsIterator.next();
-                if (i == 0) {
-                    itemIdPartBuffer.append(" rcitem.identifier = "
-                        + qs(resourceId));
-                    i++;
-                }
-                else {
-                    itemIdPartBuffer.append(" OR rcitem.identifier = "
-                        + qs(resourceId));
-                }
-            }
-            String itemIdPart = itemIdPartBuffer.toString();
-            rs =
-                executeQuery(stmt, "SELECT rcrecord.recordkey "
-                    + "FROM rcitem, rcrecord "
-                    + "WHERE (rcitem.itemkey=rcrecord.itemkey) AND ("
-                    + itemIdPart + " )");
-            Vector<Integer> currentRecordKeys = new Vector<Integer>();
-            while (rs.next()) {
-                currentRecordKeys.add(new Integer(rs.getInt(1)));
-            }
 
-            rs.close();
             rs =
                 executeQuery(stmt, "SELECT setkey FROM rcset WHERE setspec = "
                     + qs(curentSpec));
@@ -800,7 +774,7 @@ public class RCDatabase {
                     + curentSpec);
             }
             rs.close();
-
+            
             rs =
                 executeQuery(stmt,
                     "SELECT rcmembership.recordkey FROM rcmembership "
@@ -810,28 +784,33 @@ public class RCDatabase {
             while (rs.next()) {
                 existRecordKeys.add(new Integer(rs.getInt(1)));
             }
-            Iterator<Integer> existRecordKeysIterator =
-                    existRecordKeys.iterator();
             rs.close();
-
-            Iterator<Integer> currentRecordKeysIterator =
-                currentRecordKeys.iterator();
-            while (currentRecordKeysIterator.hasNext()) {
-                Integer recordKey = currentRecordKeysIterator.next();
-                if (!existRecordKeys.contains(recordKey)) {
-                    logger.info("Set membership is new. Adding to db.");
-                    int recordKeyInt = recordKey.intValue();
-                    executeUpdate(stmt,
-                        "INSERT INTO rcMembership (setKey, recordKey) "
-                            + "VALUES (" + currentSetKey + ", " + recordKeyInt
-                            + ")");
+            
+            int currentRecordKey;
+            for (String resourceId : resourceIds)
+            {
+            	currentRecordKey = -1;
+            	rs =
+                        executeQuery(stmt, "SELECT rcrecord.recordkey "
+                            + "FROM rcitem, rcrecord "
+                            + "WHERE (rcitem.itemkey=rcrecord.itemkey) AND ("
+                            + "rcitem.identifier = " + qs(resourceId) + " )");
+            	if (rs.next()) {
+            		currentRecordKey = new Integer(rs.getInt(1));
+            		if (currentRecordKey != -1)
+            		{
+            			executeUpdate(stmt,
+                                "INSERT INTO rcMembership (setKey, recordKey) "
+                                    + "VALUES (" + currentSetKey + ", " + currentRecordKey
+                                    + ")");
+            		}
                 }
+            	rs.close();
             }
-
-            while (existRecordKeysIterator.hasNext()) {
-                Integer existKey = existRecordKeysIterator.next();
+                
+            for (int existRecordKey : existRecordKeys) {
                 logger.info("Set membership is altered. Deleting from db.");
-                int recordKeyInt = existKey.intValue();
+                int recordKeyInt = existRecordKey;
                 executeUpdate(stmt, "DELETE from rcMembership WHERE recordKey = " + recordKeyInt);
             }
         }
